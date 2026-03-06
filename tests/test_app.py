@@ -16,6 +16,9 @@ from mongomock_motor import AsyncMongoMockClient
 from app.main import app
 from app.models import ItemDocument, UserDocument
 
+# ObjectId válido porém inexistente, usado para testes de 404
+NONEXISTENT_ID = "507f1f77bcf86cd799439011"
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def init_test_db():
@@ -107,7 +110,7 @@ class TestItemsCRUD:
 
     @pytest.mark.asyncio
     async def test_get_item_not_found(self, ac):
-        r = await ac.get("/items/507f1f77bcf86cd799439011")
+        r = await ac.get(f"/items/{NONEXISTENT_ID}")
         assert r.status_code == 404
 
     @pytest.mark.asyncio
@@ -121,7 +124,7 @@ class TestItemsCRUD:
 
     @pytest.mark.asyncio
     async def test_update_item_not_found(self, ac):
-        r = await ac.put("/items/507f1f77bcf86cd799439011", json={"price": 100.0})
+        r = await ac.put(f"/items/{NONEXISTENT_ID}", json={"price": 100.0})
         assert r.status_code == 404
 
     @pytest.mark.asyncio
@@ -134,7 +137,7 @@ class TestItemsCRUD:
 
     @pytest.mark.asyncio
     async def test_delete_item_not_found(self, ac):
-        r = await ac.delete("/items/507f1f77bcf86cd799439011")
+        r = await ac.delete(f"/items/{NONEXISTENT_ID}")
         assert r.status_code == 404
 
 
@@ -176,5 +179,5 @@ class TestUsers:
 
     @pytest.mark.asyncio
     async def test_get_user_not_found(self, ac):
-        r = await ac.get("/users/507f1f77bcf86cd799439011")
+        r = await ac.get(f"/users/{NONEXISTENT_ID}")
         assert r.status_code == 404
