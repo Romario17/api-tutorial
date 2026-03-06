@@ -225,6 +225,22 @@ class TestWebSocket:
             data = ws.receive_text()
             assert data == "Olá do chat!"
 
+    @pytest.mark.asyncio
+    async def test_ws_echo_template_page(self, ac):
+        """Testa que a página HTML de teste do WebSocket echo é renderizada."""
+        r = await ac.get("/ws/test/echo")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "WebSocket Echo" in r.text
+
+    @pytest.mark.asyncio
+    async def test_ws_chat_template_page(self, ac):
+        """Testa que a página HTML de teste do WebSocket chat é renderizada."""
+        r = await ac.get("/ws/test/chat")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "WebSocket Chat" in r.text
+
 
 # ---------------------------------------------------------------------------
 # Webhooks (Avançado)

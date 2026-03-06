@@ -1,0 +1,22 @@
+services:
+  mongodb:
+    image: mongodb/mongodb-community-server:8.0.4
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    build: .
+    container_name: api-tutorial
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URL: "mongodb://mongodb:27017"
+      DB_NAME: "api_tutorial"
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo_data:
