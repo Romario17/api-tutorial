@@ -8,10 +8,13 @@ quando um evento ocorre (ex: pagamento confirmado, push no GitHub, etc.).
 Referência: https://fastapi.tiangolo.com/advanced/openapi-webhooks/
 """
 
-import hmac
 import hashlib
+import hmac
+import json
 from datetime import datetime, timezone
 from typing import Any
+
+import os
 
 from fastapi import APIRouter, HTTPException, Header, Request, status
 from pydantic import BaseModel, Field
@@ -22,7 +25,7 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks (Avançado)"])
 _received_events: list[dict[str, Any]] = []
 
 # Chave secreta para validação de assinatura (em produção, use variável de ambiente)
-WEBHOOK_SECRET = "minha-chave-secreta"
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "minha-chave-secreta")
 
 
 class WebhookPayload(BaseModel):
@@ -86,8 +89,6 @@ async def receive_signed_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Assinatura inválida",
         )
-
-    import json
 
     payload = json.loads(body)
     now = datetime.now(timezone.utc).isoformat()
