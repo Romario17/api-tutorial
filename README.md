@@ -66,6 +66,5 @@ api-tutorial/
 - [Documentação oficial FastAPI](https://fastapi.tiangolo.com/)
 - [Documentação Pydantic](https://docs.pydantic.dev/)
 - [Tutorial FastAPI (oficial)](https://fastapi.tiangolo.com/tutorial/)
-- [Curso Python DATA ICMC](https://www.youtube.com/playlist?list=PLFE-LjWAAP9Skog9YhRvuNBjWD724c32m)
 - [HTTP Methods — MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods)
 - [REST API Design Best Practices](https://restfulapi.net/)
