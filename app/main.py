@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import init_db
-from app.routers import items, users
+from app.routers import items, users, webhooks, websocket
 
 
 @asynccontextmanager
@@ -28,10 +28,11 @@ app = FastAPI(
     title="API Tutorial",
     description=(
         "Aplicação de exemplo criada para a oficina de FastAPI. "
-        "Demonstra conceitos do básico ao intermediário com um CRUD completo "
-        "usando MongoDB + Beanie como ODM assíncrono."
+        "Demonstra conceitos do básico ao avançado com um CRUD completo "
+        "usando MongoDB + Beanie como ODM assíncrono, além de exemplos "
+        "de WebSockets e Webhooks."
     ),
-    version="1.0.0",
+    version="2.0.0",
     contact={
         "name": "Oficina FastAPI",
         "url": "https://github.com/Romario17/api-tutorial",
@@ -42,6 +43,8 @@ app = FastAPI(
 # Registra os routers
 app.include_router(items.router)
 app.include_router(users.router)
+app.include_router(webhooks.router)
+app.include_router(websocket.router)
 
 
 @app.get("/", tags=["Root"], summary="Raiz da API")
