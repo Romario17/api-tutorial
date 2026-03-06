@@ -1,6 +1,6 @@
 # API Tutorial com FastAPI
 
-Tutorial prático de APIs com FastAPI para uma oficina de 1 hora, do básico ao intermediário, com referências para tópicos avançados.
+Tutorial prático de APIs com FastAPI para uma oficina de 1 hora, do básico ao avançado, com exemplos de WebSockets e Webhooks.
 
 ## 📋 Conteúdo
 
@@ -10,7 +10,7 @@ Tutorial prático de APIs com FastAPI para uma oficina de 1 hora, do básico ao 
 | Parte 2 | FastAPI — Primeiros passos e documentação automática |
 | Parte 3 | Modelos e validação com Pydantic |
 | Parte 4 | CRUD completo: `GET`, `POST`, `PUT`, `DELETE` |
-| Parte 5 | Tópicos avançados para explorar por conta própria |
+| Parte 5 | Tópicos avançados: WebSockets e Webhooks |
 
 ## 🚀 Como usar
 
@@ -69,18 +69,70 @@ api-tutorial/
 │   ├── database.py     # Inicialização do MongoDB com Beanie
 │   └── routers/
 │       ├── items.py    # Rotas de itens (CRUD)
-│       └── users.py    # Rotas de usuários
+│       ├── users.py    # Rotas de usuários
+│       ├── webhooks.py # Recebimento e validação de webhooks (avançado)
+│       └── websocket.py # WebSocket echo e chat (avançado)
 ├── tests/              # Testes com pytest + mongomock
 │   └── test_app.py
 └── README.md
 ```
+
+## 🔬 Tópicos Avançados
+
+### WebSockets
+
+A aplicação inclui dois endpoints WebSocket para comunicação bidirecional em tempo real:
+
+- **`/ws/echo`** — Eco: devolve a mesma mensagem recebida pelo cliente.
+- **`/ws/chat`** — Chat: retransmite mensagens para todos os clientes conectados (broadcast).
+
+Exemplo de uso com JavaScript:
+
+```javascript
+const ws = new WebSocket("ws://localhost:8000/ws/echo");
+ws.onmessage = (e) => console.log(e.data);
+ws.onopen = () => ws.send("Olá!");
+```
+
+### Webhooks
+
+Endpoints para recebimento e processamento de webhooks (callbacks HTTP):
+
+- **`POST /webhooks/receive`** — Recebe um webhook genérico (sem validação de assinatura).
+- **`POST /webhooks/receive/signed`** — Recebe um webhook e valida a assinatura HMAC-SHA256.
+- **`GET /webhooks/events`** — Lista todos os eventos recebidos.
+- **`DELETE /webhooks/events`** — Limpa os eventos armazenados.
+
+Exemplo com `curl`:
+
+```bash
+# Webhook simples
+curl -X POST http://localhost:8000/webhooks/receive \
+  -H "Content-Type: application/json" \
+  -d '{"event": "payment.confirmed", "data": {"amount": 100.0}}'
+
+# Webhook com assinatura HMAC-SHA256
+BODY='{"event": "order.shipped", "data": {"order_id": "abc123"}}'
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "minha-chave-secreta" | awk '{print $2}')
+curl -X POST http://localhost:8000/webhooks/receive/signed \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Signature: $SIG" \
+  -d "$BODY"
+```
+
+### Nota sobre o Beanie v2
+
+A partir do Beanie v2, o driver assíncrono passou a ser o **pymongo** (`AsyncMongoClient`),
+substituindo o Motor que era utilizado anteriormente. Veja: [Beanie PR #1113](https://github.com/BeanieODM/beanie/pull/1113).
 
 ## 🔗 Referências
 
 - [Documentação oficial FastAPI](https://fastapi.tiangolo.com/)
 - [Documentação Pydantic](https://docs.pydantic.dev/)
 - [Beanie ODM (MongoDB)](https://beanie-odm.dev/)
-- [Motor (driver async MongoDB)](https://motor.readthedocs.io/)
+- [PyMongo (driver async MongoDB)](https://pymongo.readthedocs.io/)
+- [FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/)
+- [FastAPI OpenAPI Webhooks](https://fastapi.tiangolo.com/advanced/openapi-webhooks/)
 - [Tutorial FastAPI (oficial)](https://fastapi.tiangolo.com/tutorial/)
 - [HTTP Methods — MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods)
 - [REST API Design Best Practices](https://restfulapi.net/)
