@@ -33,7 +33,12 @@ source .venv/bin/activate  # Linux/macOS
 # 3. Instale as dependências
 pip install -r requirements.txt
 
-# 4. Abra o notebook
+# 4. Inicie o MongoDB (necessário para a aplicação de exemplo)
+#    Opção A — Docker:
+docker run -d -p 27017:27017 --name mongodb mongo:7
+#    Opção B — Instalação local: https://www.mongodb.com/docs/manual/installation/
+
+# 5. Abra o notebook
 jupyter notebook tutorial.ipynb
 
 # Ou execute a aplicação de exemplo diretamente:
@@ -45,6 +50,13 @@ Depois de iniciar o servidor, acesse:
 - **Documentação interativa (Swagger UI)**: http://127.0.0.1:8000/docs
 - **Documentação alternativa (ReDoc)**: http://127.0.0.1:8000/redoc
 
+### Variáveis de ambiente
+
+| Variável | Descrição | Padrão |
+|----------|-----------|--------|
+| `MONGO_URL` | Connection string do MongoDB | `mongodb://localhost:27017` |
+| `DB_NAME` | Nome do banco de dados | `api_tutorial` |
+
 ## 📂 Estrutura
 
 ```
@@ -53,11 +65,13 @@ api-tutorial/
 ├── requirements.txt    # Dependências Python
 ├── app/                # Aplicação FastAPI de exemplo
 │   ├── main.py         # Ponto de entrada da aplicação
-│   ├── models.py       # Modelos Pydantic
-│   ├── database.py     # Banco de dados em memória (simulação)
+│   ├── models.py       # Documentos Beanie + modelos Pydantic
+│   ├── database.py     # Inicialização do MongoDB com Beanie
 │   └── routers/
-│       ├── items.py    # Rotas de itens
+│       ├── items.py    # Rotas de itens (CRUD)
 │       └── users.py    # Rotas de usuários
+├── tests/              # Testes com pytest + mongomock
+│   └── test_app.py
 └── README.md
 ```
 
@@ -65,6 +79,8 @@ api-tutorial/
 
 - [Documentação oficial FastAPI](https://fastapi.tiangolo.com/)
 - [Documentação Pydantic](https://docs.pydantic.dev/)
+- [Beanie ODM (MongoDB)](https://beanie-odm.dev/)
+- [Motor (driver async MongoDB)](https://motor.readthedocs.io/)
 - [Tutorial FastAPI (oficial)](https://fastapi.tiangolo.com/tutorial/)
 - [HTTP Methods — MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods)
 - [REST API Design Best Practices](https://restfulapi.net/)

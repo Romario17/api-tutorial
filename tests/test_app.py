@@ -1,5 +1,5 @@
 """
-Testes da aplicação FastAPI de exemplo.
+Testes da aplicação FastAPI com Beanie + mongomock.
 
 Execute com:
     pytest tests/ -v
@@ -8,24 +8,37 @@ Referência: https://fastapi.tiangolo.com/tutorial/testing/
 """
 
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from beanie import init_beanie
+from httpx import ASGITransport, AsyncClient
+from mongomock_motor import AsyncMongoMockClient
 
 from app.main import app
-from app import database
+from app.models import ItemDocument, UserDocument
+
+# ObjectId válido porém inexistente, usado para testes de 404
+NONEXISTENT_ID = "507f1f77bcf86cd799439011"
 
 
-@pytest.fixture(autouse=True)
-def reset_database():
-    """Limpa o banco em memória antes de cada teste."""
-    database._items.clear()
-    database._users.clear()
-    database._users_passwords.clear()
-    database._item_counter = 0
-    database._user_counter = 0
+@pytest_asyncio.fixture(autouse=True)
+async def init_test_db():
+    """Inicializa o Beanie com mongomock e limpa as coleções entre testes."""
+    client = AsyncMongoMockClient()
+    await init_beanie(
+        database=client["test_db"],
+        document_models=[ItemDocument, UserDocument],
+    )
     yield
+    await ItemDocument.delete_all()
+    await UserDocument.delete_all()
 
 
-client = TestClient(app)
+@pytest_asyncio.fixture
+async def ac():
+    """Cliente HTTP assíncrono para testar a aplicação FastAPI."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
 # ---------------------------------------------------------------------------
@@ -33,13 +46,15 @@ client = TestClient(app)
 # ---------------------------------------------------------------------------
 
 class TestRoot:
-    def test_root_returns_200(self):
-        r = client.get("/")
+    @pytest.mark.asyncio
+    async def test_root_returns_200(self, ac):
+        r = await ac.get("/")
         assert r.status_code == 200
         assert "message" in r.json()
 
-    def test_health_check(self):
-        r = client.get("/health")
+    @pytest.mark.asyncio
+    async def test_health_check(self, ac):
+        r = await ac.get("/health")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
@@ -49,66 +64,80 @@ class TestRoot:
 # ---------------------------------------------------------------------------
 
 class TestItemsCRUD:
-    def _create_item(self, name="Notebook", price=3500.0, **kwargs):
-        return client.post("/items/", json={"name": name, "price": price, **kwargs})
+    async def _create_item(self, ac, name="Notebook", price=3500.0, **kwargs):
+        return await ac.post("/items/", json={"name": name, "price": price, **kwargs})
 
-    def test_list_items_empty(self):
-        r = client.get("/items/")
+    @pytest.mark.asyncio
+    async def test_list_items_empty(self, ac):
+        r = await ac.get("/items/")
         assert r.status_code == 200
         assert r.json() == []
 
-    def test_create_item_returns_201(self):
-        r = self._create_item()
+    @pytest.mark.asyncio
+    async def test_create_item_returns_201(self, ac):
+        r = await self._create_item(ac)
         assert r.status_code == 201
         data = r.json()
         assert data["name"] == "Notebook"
         assert data["price"] == 3500.0
-        assert data["id"] == 1
+        assert "id" in data
 
-    def test_create_item_validates_price(self):
-        r = self._create_item(price=-10)
+    @pytest.mark.asyncio
+    async def test_create_item_validates_price(self, ac):
+        r = await self._create_item(ac, price=-10)
         assert r.status_code == 422
 
-    def test_create_item_validates_empty_name(self):
-        r = self._create_item(name="")
+    @pytest.mark.asyncio
+    async def test_create_item_validates_empty_name(self, ac):
+        r = await self._create_item(ac, name="")
         assert r.status_code == 422
 
-    def test_list_items_after_creation(self):
-        self._create_item("Mouse", 89.90)
-        self._create_item("Teclado", 199.0)
-        r = client.get("/items/")
+    @pytest.mark.asyncio
+    async def test_list_items_after_creation(self, ac):
+        await self._create_item(ac, "Mouse", 89.90)
+        await self._create_item(ac, "Teclado", 199.0)
+        r = await ac.get("/items/")
         assert r.status_code == 200
         assert len(r.json()) == 2
 
-    def test_get_item_by_id(self):
-        self._create_item("Mouse", 89.90)
-        r = client.get("/items/1")
+    @pytest.mark.asyncio
+    async def test_get_item_by_id(self, ac):
+        r = await self._create_item(ac, "Mouse", 89.90)
+        item_id = r.json()["id"]
+        r = await ac.get(f"/items/{item_id}")
         assert r.status_code == 200
         assert r.json()["name"] == "Mouse"
 
-    def test_get_item_not_found(self):
-        r = client.get("/items/999")
+    @pytest.mark.asyncio
+    async def test_get_item_not_found(self, ac):
+        r = await ac.get(f"/items/{NONEXISTENT_ID}")
         assert r.status_code == 404
 
-    def test_update_item(self):
-        self._create_item("Notebook", 3500.0)
-        r = client.put("/items/1", json={"price": 3200.0})
+    @pytest.mark.asyncio
+    async def test_update_item(self, ac):
+        r = await self._create_item(ac, "Notebook", 3500.0)
+        item_id = r.json()["id"]
+        r = await ac.put(f"/items/{item_id}", json={"price": 3200.0})
         assert r.status_code == 200
         assert r.json()["price"] == 3200.0
         assert r.json()["name"] == "Notebook"  # campo não alterado mantido
 
-    def test_update_item_not_found(self):
-        r = client.put("/items/999", json={"price": 100.0})
+    @pytest.mark.asyncio
+    async def test_update_item_not_found(self, ac):
+        r = await ac.put(f"/items/{NONEXISTENT_ID}", json={"price": 100.0})
         assert r.status_code == 404
 
-    def test_delete_item(self):
-        self._create_item()
-        r = client.delete("/items/1")
+    @pytest.mark.asyncio
+    async def test_delete_item(self, ac):
+        r = await self._create_item(ac)
+        item_id = r.json()["id"]
+        r = await ac.delete(f"/items/{item_id}")
         assert r.status_code == 204
-        assert client.get("/items/1").status_code == 404
+        assert (await ac.get(f"/items/{item_id}")).status_code == 404
 
-    def test_delete_item_not_found(self):
-        r = client.delete("/items/999")
+    @pytest.mark.asyncio
+    async def test_delete_item_not_found(self, ac):
+        r = await ac.delete(f"/items/{NONEXISTENT_ID}")
         assert r.status_code == 404
 
 
@@ -117,32 +146,38 @@ class TestItemsCRUD:
 # ---------------------------------------------------------------------------
 
 class TestUsers:
-    def _create_user(self, username="joao", email="joao@example.com", password="senha123"):
-        return client.post("/users/", json={"username": username, "email": email, "password": password})
+    async def _create_user(self, ac, username="joao", email="joao@example.com", password="senha123"):
+        return await ac.post("/users/", json={"username": username, "email": email, "password": password})
 
-    def test_list_users_empty(self):
-        r = client.get("/users/")
+    @pytest.mark.asyncio
+    async def test_list_users_empty(self, ac):
+        r = await ac.get("/users/")
         assert r.status_code == 200
         assert r.json() == []
 
-    def test_create_user_returns_201(self):
-        r = self._create_user()
+    @pytest.mark.asyncio
+    async def test_create_user_returns_201(self, ac):
+        r = await self._create_user(ac)
         assert r.status_code == 201
         data = r.json()
         assert data["username"] == "joao"
         assert "password" not in data  # senha nunca exposta
 
-    def test_create_user_duplicate_username(self):
-        self._create_user()
-        r = self._create_user()  # mesmo username
+    @pytest.mark.asyncio
+    async def test_create_user_duplicate_username(self, ac):
+        await self._create_user(ac)
+        r = await self._create_user(ac)  # mesmo username
         assert r.status_code == 409
 
-    def test_get_user_by_id(self):
-        self._create_user()
-        r = client.get("/users/1")
+    @pytest.mark.asyncio
+    async def test_get_user_by_id(self, ac):
+        r = await self._create_user(ac)
+        user_id = r.json()["id"]
+        r = await ac.get(f"/users/{user_id}")
         assert r.status_code == 200
         assert r.json()["username"] == "joao"
 
-    def test_get_user_not_found(self):
-        r = client.get("/users/999")
+    @pytest.mark.asyncio
+    async def test_get_user_not_found(self, ac):
+        r = await ac.get(f"/users/{NONEXISTENT_ID}")
         assert r.status_code == 404
