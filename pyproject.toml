@@ -23,8 +23,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=1.0.0",
     "mongomock-motor>=0.0.34",
     "jupyter>=1.0.0",
     "ipykernel>=6.0.0",
@@ -32,6 +30,3 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["app*"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
