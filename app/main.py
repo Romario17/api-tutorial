@@ -85,3 +85,15 @@ async def ws_test_echo(request: Request):
 async def ws_test_chat(request: Request):
     """Renderiza página HTML para testar o WebSocket de chat."""
     return templates.TemplateResponse(request, "ws_chat.html")
+
+
+# ---------------------------------------------------------------------------
+# Página HTML para testar Webhooks (Jinja2 Templates)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/webhooks/test", tags=["Webhooks (Avançado)"],
+         summary="Página de teste – Webhooks", include_in_schema=False)
+async def webhook_test_page(request: Request):
+    """Renderiza página HTML para testar o fluxo completo de webhooks."""
+    return templates.TemplateResponse(request, "webhook_test.html")

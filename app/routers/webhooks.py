@@ -5,18 +5,29 @@ Demonstra como receber notificações externas (webhooks) e processá-las.
 Webhooks são callbacks HTTP que serviços externos enviam para a sua API
 quando um evento ocorre (ex: pagamento confirmado, push no GitHub, etc.).
 
+Inclui também uma interface web para testar o fluxo completo:
+  POST /webhooks/trigger → assina HMAC-SHA256 → POST /webhooks/receive/signed
+  → valida → processa → SSE push → UI
+
 Referência: https://fastapi.tiangolo.com/advanced/openapi-webhooks/
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
+import os
+import time
+from collections import deque
+from collections.abc import AsyncIterable
 from datetime import datetime, timezone
 from typing import Any
 
-import os
-
+import httpx
 from fastapi import APIRouter, HTTPException, Header, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from httpx import ASGITransport
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks (Avançado)"])
@@ -26,6 +37,15 @@ _received_events: list[dict[str, Any]] = []
 
 # Chave secreta para validação de assinatura (em produção, use variável de ambiente)
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "minha-chave-secreta")
+
+# Histórico de eventos para SSE (últimos 50 eventos com formato enriquecido)
+_event_history: deque[dict[str, Any]] = deque(maxlen=50)
+
+# Lista de filas para assinantes SSE conectados
+_subscribers: list[asyncio.Queue] = []
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
 
 
 class WebhookPayload(BaseModel):
@@ -43,10 +63,74 @@ class WebhookResponse(BaseModel):
     received_at: str = Field(..., description="Data/hora do recebimento (ISO 8601)")
 
 
+class TriggerRequest(BaseModel):
+    """Payload para disparar um webhook de teste."""
+
+    evento: str = Field(..., description="Tipo do evento (ex: 'pagamento.aprovado')")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Dados do evento")
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
 def verify_signature(payload_body: bytes, signature: str, secret: str) -> bool:
     """Valida a assinatura HMAC-SHA256 do payload."""
     expected = hmac.new(secret.encode(), payload_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+async def _broadcast(event: dict[str, Any]) -> None:
+    """Envia um evento para todos os assinantes SSE conectados."""
+    for queue in _subscribers:
+        await queue.put(event)
+
+
+def _process_event(event_type: str, data: dict[str, Any]) -> str:
+    """Processa um evento e retorna uma descrição legível do resultado."""
+    handlers = {
+        "pagamento.aprovado": lambda d: (
+            f"Pagamento de R$ {d.get('valor', 0):.2f} confirmado "
+            f"para {d.get('cliente', '?')}"
+        ),
+        "pagamento.recusado": lambda d: (
+            f"Pagamento recusado: {d.get('motivo', '?')}"
+        ),
+        "usuario.criado": lambda d: (
+            f"Novo usuário: {d.get('email', '?')} (plano {d.get('plano', '?')})"
+        ),
+        "pedido.enviado": lambda d: (
+            f"Pedido #{d.get('pedido_id', '?')} via {d.get('transportadora', '?')} "
+            f"— rastreio: {d.get('rastreio', '?')}"
+        ),
+        "assinatura.cancelada": lambda d: (
+            f"Assinatura cancelada: {d.get('cliente', '?')} "
+            f"({d.get('plano', '?')})"
+        ),
+    }
+    fn = handlers.get(event_type)
+    return fn(data) if fn else f"Evento '{event_type}' recebido e registrado."
+
+
+def _build_sse_event(
+    event_type: str,
+    data: dict[str, Any],
+    status: str = "processado",
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Cria um evento no formato enriquecido para SSE e histórico."""
+    resultado = _process_event(event_type, data) if status == "processado" else None
+    return {
+        "id": int(time.time() * 1000),
+        "horario": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+        "evento": event_type,
+        "status": status,
+        "resultado": resultado,
+        "motivo": reason,
+        "payload": data,
+    }
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
 @router.post(
@@ -63,6 +147,11 @@ async def receive_webhook(payload: WebhookPayload):
     """
     now = datetime.now(timezone.utc).isoformat()
     _received_events.append({"event": payload.event, "data": payload.data, "received_at": now})
+
+    sse_event = _build_sse_event(payload.event, payload.data)
+    _event_history.appendleft(sse_event)
+    await _broadcast(sse_event)
+
     return WebhookResponse(status="received", event=payload.event, received_at=now)
 
 
@@ -85,6 +174,11 @@ async def receive_signed_webhook(
     body = await request.body()
 
     if not verify_signature(body, x_webhook_signature, WEBHOOK_SECRET):
+        sse_event = _build_sse_event(
+            "desconhecido", {}, status="rejeitado", reason="Assinatura inválida"
+        )
+        _event_history.appendleft(sse_event)
+        await _broadcast(sse_event)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Assinatura inválida",
@@ -93,7 +187,72 @@ async def receive_signed_webhook(
     payload = json.loads(body)
     now = datetime.now(timezone.utc).isoformat()
     _received_events.append({"event": payload["event"], "data": payload.get("data", {}), "received_at": now})
+
+    sse_event = _build_sse_event(payload["event"], payload.get("data", {}))
+    _event_history.appendleft(sse_event)
+    await _broadcast(sse_event)
+
     return WebhookResponse(status="received", event=payload["event"], received_at=now)
+
+
+@router.post(
+    "/trigger",
+    summary="Disparar webhook de teste",
+)
+async def trigger_webhook(request: Request, body: TriggerRequest):
+    """
+    Simula um serviço externo: assina o payload com HMAC-SHA256 e envia
+    para ``/webhooks/receive/signed`` via chamada HTTP interna.
+
+    Demonstra o fluxo completo: assinatura → envio → validação → processamento.
+    """
+    payload_dict = {"event": body.evento, "data": body.payload}
+    payload_bytes = json.dumps(payload_dict).encode()
+    signature = hmac.new(
+        WEBHOOK_SECRET.encode(), payload_bytes, hashlib.sha256
+    ).hexdigest()
+
+    transport = ASGITransport(app=request.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://internal") as client:
+        resp = await client.post(
+            "/webhooks/receive/signed",
+            content=payload_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "X-Webhook-Signature": signature,
+            },
+        )
+
+    return JSONResponse({
+        "enviado": True,
+        "status": resp.status_code,
+        "assinatura": signature,
+        "resposta": resp.json(),
+    })
+
+
+@router.get(
+    "/stream",
+    response_class=EventSourceResponse,
+    summary="Stream SSE de eventos",
+)
+async def sse_stream() -> AsyncIterable[ServerSentEvent]:
+    """
+    Server-Sent Events — push de eventos em tempo real para o frontend.
+
+    Ao conectar, recebe o histórico recente e, em seguida, todos os novos
+    eventos conforme são recebidos.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+    _subscribers.append(queue)
+    try:
+        for ev in reversed(list(_event_history)):
+            yield ServerSentEvent(data=json.dumps(ev), id=str(ev["id"]))
+        while True:
+            ev = await queue.get()
+            yield ServerSentEvent(data=json.dumps(ev), id=str(ev["id"]))
+    finally:
+        _subscribers.remove(queue)
 
 
 @router.get(
@@ -114,3 +273,4 @@ async def list_events():
 async def clear_events():
     """Remove todos os eventos recebidos da memória."""
     _received_events.clear()
+    _event_history.clear()

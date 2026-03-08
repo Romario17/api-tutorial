@@ -19,7 +19,14 @@ from starlette.testclient import TestClient
 
 from app.main import app
 from app.models import ItemDocument, UserDocument
-from app.routers.webhooks import WEBHOOK_SECRET, _received_events
+from app.routers.webhooks import (
+    WEBHOOK_SECRET,
+    _received_events,
+    _event_history,
+    _subscribers,
+    _process_event,
+    _build_sse_event,
+)
 
 # ObjectId válido porém inexistente, usado para testes de 404
 NONEXISTENT_ID = "507f1f77bcf86cd799439011"
@@ -44,6 +51,8 @@ class AsyncTestBase(unittest.IsolatedAsyncioTestCase):
         await ItemDocument.delete_all()
         await UserDocument.delete_all()
         _received_events.clear()
+        _event_history.clear()
+        _subscribers.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +297,108 @@ class TestWebhooks(AsyncTestBase):
             headers={"Content-Type": "application/json", "X-Webhook-Signature": "invalid-signature"},
         )
         self.assertEqual(r.status_code, 401)
+
+
+# ---------------------------------------------------------------------------
+# Webhook UI & Trigger (Avançado)
+# ---------------------------------------------------------------------------
+
+class TestWebhookUI(AsyncTestBase):
+    async def test_webhook_test_page(self):
+        """Testa que a página HTML de teste de webhooks é renderizada."""
+        r = await self.ac.get("/webhooks/test")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r.headers["content-type"])
+        self.assertIn("Webhook", r.text)
+
+    async def test_trigger_webhook(self):
+        """Testa o disparo de webhook via endpoint trigger."""
+        payload = {
+            "evento": "pagamento.aprovado",
+            "payload": {"cliente": "João", "valor": 100.0, "metodo": "pix"},
+        }
+        r = await self.ac.post("/webhooks/trigger", json=payload)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data["enviado"])
+        self.assertEqual(data["status"], 200)
+        self.assertIn("assinatura", data)
+        self.assertIn("resposta", data)
+
+    async def test_trigger_stores_event(self):
+        """Testa que o trigger armazena o evento na lista de recebidos."""
+        payload = {
+            "evento": "usuario.criado",
+            "payload": {"email": "test@example.com", "plano": "pro"},
+        }
+        await self.ac.post("/webhooks/trigger", json=payload)
+        r = await self.ac.get("/webhooks/events")
+        events = r.json()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["event"], "usuario.criado")
+
+    async def test_trigger_populates_sse_history(self):
+        """Testa que o trigger popula o histórico SSE."""
+        payload = {
+            "evento": "pedido.enviado",
+            "payload": {"pedido_id": "PED-001", "transportadora": "Correios"},
+        }
+        await self.ac.post("/webhooks/trigger", json=payload)
+        self.assertEqual(len(_event_history), 1)
+        self.assertEqual(_event_history[0]["evento"], "pedido.enviado")
+        self.assertEqual(_event_history[0]["status"], "processado")
+
+    async def test_receive_webhook_broadcasts_sse(self):
+        """Testa que receive_webhook popula o histórico SSE."""
+        await self.ac.post(
+            "/webhooks/receive",
+            json={"event": "test.event", "data": {"key": "value"}},
+        )
+        self.assertEqual(len(_event_history), 1)
+        self.assertEqual(_event_history[0]["evento"], "test.event")
+
+    async def test_clear_events_also_clears_history(self):
+        """Testa que clear_events limpa o histórico SSE."""
+        await self.ac.post(
+            "/webhooks/receive",
+            json={"event": "test.event", "data": {}},
+        )
+        self.assertGreater(len(_event_history), 0)
+        await self.ac.delete("/webhooks/events")
+        self.assertEqual(len(_event_history), 0)
+
+    def test_process_event_known_type(self):
+        """Testa processamento de evento com tipo conhecido."""
+        result = _process_event(
+            "pagamento.aprovado",
+            {"cliente": "João", "valor": 99.90},
+        )
+        self.assertIn("João", result)
+        self.assertIn("99.90", result)
+
+    def test_process_event_unknown_type(self):
+        """Testa processamento de evento com tipo desconhecido."""
+        result = _process_event("custom.event", {})
+        self.assertIn("custom.event", result)
+
+    def test_build_sse_event_structure(self):
+        """Testa a estrutura do evento SSE gerado."""
+        ev = _build_sse_event("test.event", {"key": "val"})
+        self.assertIn("id", ev)
+        self.assertIn("horario", ev)
+        self.assertEqual(ev["evento"], "test.event")
+        self.assertEqual(ev["status"], "processado")
+        self.assertIsNotNone(ev["resultado"])
+        self.assertEqual(ev["payload"], {"key": "val"})
+
+    def test_build_sse_event_rejected(self):
+        """Testa evento SSE com status rejeitado."""
+        ev = _build_sse_event(
+            "bad.event", {}, status="rejeitado", reason="Assinatura invalida"
+        )
+        self.assertEqual(ev["status"], "rejeitado")
+        self.assertEqual(ev["motivo"], "Assinatura invalida")
+        self.assertIsNone(ev["resultado"])
 
 
 if __name__ == "__main__":

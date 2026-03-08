@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webhook Test - API Tutorial</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Bebas+Neue&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0c0f0a;
+  --surface:  #141810;
+  --border:   #252d1e;
+  --sender:   #c8f53a;
+  --receiver: #3af5a0;
+  --red:      #f53a5a;
+  --text:     #d4e8c0;
+  --muted:    #5a7048;
+  --mono:     'Fragment Mono', monospace;
+  --display:  'Bebas Neue', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(200,245,58,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,245,58,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* ── Nav ── */
+.top-nav {
+  padding: 0.5rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+}
+
+.top-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.top-nav a:hover { color: var(--sender); }
+.top-nav a.active { color: var(--sender); }
+
+/* ── Header ── */
+header {
+  padding: 1.2rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+header h1 {
+  font-family: var(--display);
+  font-size: 2rem;
+  letter-spacing: 0.08em;
+  color: var(--sender);
+}
+
+header p {
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.6;
+}
+
+.live {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: var(--receiver);
+  text-transform: uppercase;
+}
+
+.live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--receiver);
+  box-shadow: 0 0 8px var(--receiver);
+  animation: pulse 2s infinite;
+}
+
+.live.disconnected { color: var(--red); }
+.live.disconnected .live-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* ── Flow indicator ── */
+.flow {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.flow-step {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+
+.flow-step.a { border-color: var(--sender); color: var(--sender); }
+.flow-step.b { border-color: var(--receiver); color: var(--receiver); }
+.flow-step.c { border-color: var(--muted); color: var(--muted); }
+.flow-arrow { color: var(--muted); }
+
+/* ── Layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  min-height: 0;
+}
+
+/* ── Sender Panel ── */
+.sender-panel {
+  border-right: 1px solid var(--border);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+}
+
+.panel-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.panel-tag .pill {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+}
+
+.panel-tag.sender .pill { border-color: var(--sender); color: var(--sender); }
+.panel-tag.receiver .pill { border-color: var(--receiver); color: var(--receiver); }
+.panel-tag .line { flex: 1; height: 1px; background: var(--border); }
+
+.field-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+select, textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  outline: none;
+  transition: border-color 0.15s;
+  appearance: none;
+  border-radius: 0;
+}
+
+select:focus, textarea:focus { border-color: var(--sender); }
+textarea { resize: vertical; min-height: 150px; line-height: 1.7; }
+
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: '\u25be';
+  position: absolute; right: 0.85rem; top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted); pointer-events: none;
+}
+
+.btn-fire {
+  width: 100%;
+  padding: 0.9rem;
+  background: var(--sender);
+  border: none;
+  color: var(--bg);
+  font-family: var(--display);
+  font-size: 1.4rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+}
+
+.btn-fire:hover { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(200,245,58,0.25); }
+.btn-fire:active { transform: translateY(0); }
+.btn-fire:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.response-box {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: 0.85rem;
+  font-size: 0.68rem;
+  line-height: 1.6;
+  display: none;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.response-box.ok  { border-color: rgba(58,245,160,0.4); color: var(--receiver); }
+.response-box.err { border-color: rgba(245,58,90,0.4);  color: var(--red); }
+
+.sig-preview {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: #0c1a0a;
+  border: 1px solid #1a3018;
+  font-size: 0.6rem;
+  color: var(--muted);
+  word-break: break-all;
+  line-height: 1.6;
+  display: none;
+}
+
+/* ── Receiver Panel ── */
+.receiver-panel {
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.receiver-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.event-count {
+  margin-left: auto;
+  font-size: 0.6rem;
+  color: var(--receiver);
+  letter-spacing: 0.1em;
+}
+
+.btn-clear {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  cursor: pointer;
+}
+
+.btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+.event-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.empty {
+  text-align: center;
+  padding: 3rem 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  line-height: 2;
+}
+
+.empty .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.3; }
+
+/* ── Event card ── */
+.event-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--receiver);
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+  animation: arrive 0.3s cubic-bezier(0.16,1,0.3,1);
+  position: relative;
+}
+
+.event-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(58,245,160,0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.event-card.rejeitado { border-left-color: var(--red); }
+.event-card.rejeitado::after { background: linear-gradient(90deg, rgba(245,58,90,0.05) 0%, transparent 50%); }
+
+@keyframes arrive {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.card-evento {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--receiver);
+  letter-spacing: 0.04em;
+}
+
+.event-card.rejeitado .card-evento { color: var(--red); }
+
+.card-time { margin-left: auto; font-size: 0.58rem; color: var(--muted); }
+
+.badge {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid;
+}
+
+.badge.ok  { color: var(--receiver); border-color: rgba(58,245,160,0.3); }
+.badge.err { color: var(--red);      border-color: rgba(245,58,90,0.3); }
+
+.card-resultado {
+  font-size: 0.7rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+  font-style: italic;
+}
+
+.payload-btn {
+  background: none; border: none;
+  color: var(--muted); font-family: var(--mono);
+  font-size: 0.58rem; letter-spacing: 0.1em;
+  cursor: pointer; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.payload-btn:hover { color: var(--receiver); }
+
+pre.payload {
+  display: none;
+  margin-top: 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.65rem;
+  font-size: 0.62rem;
+  color: #7ab87a;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+/* ── Responsive ── */
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .sender-panel { border-right: none; border-bottom: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="/">&larr; API</a> &nbsp;|&nbsp;
+  <a href="/ws/test/echo">Echo</a> &nbsp;|&nbsp;
+  <a href="/ws/test/chat">Chat</a> &nbsp;|&nbsp;
+  <a href="/webhooks/test" class="active">Webhooks</a>
+</nav>
+
+<header>
+  <div>
+    <h1>WEBHOOK TEST</h1>
+    <p>POST /webhooks/trigger &rarr; assina &rarr; POST /webhooks/receive/signed &rarr; SSE &rarr; UI</p>
+  </div>
+  <div class="live" id="sse-status">
+    <div class="live-dot"></div>
+    SSE conectado
+  </div>
+</header>
+
+<div class="flow">
+  <span class="flow-step a">1. /webhooks/trigger</span>
+  <span class="flow-arrow">&rarr;</span>
+  <span class="flow-step c">assina HMAC-SHA256</span>
+  <span class="flow-arrow">&rarr;</span>
+  <span class="flow-step b">POST /webhooks/receive/signed</span>
+  <span class="flow-arrow">&rarr;</span>
+  <span class="flow-step c">valida assinatura</span>
+  <span class="flow-arrow">&rarr;</span>
+  <span class="flow-step c">processa evento</span>
+  <span class="flow-arrow">&rarr;</span>
+  <span class="flow-step b">SSE push &rarr; UI</span>
+</div>
+
+<div class="layout">
+
+  <!-- ── Sender ── -->
+  <div class="sender-panel">
+    <div class="panel-tag sender">
+      <span class="pill">SENDER</span>
+      <span>Servico externo</span>
+      <span class="line"></span>
+    </div>
+
+    <div>
+      <div class="field-label">Tipo de Evento</div>
+      <div class="select-wrap">
+        <select id="evento" onchange="atualizarPayload()">
+          <option value="pagamento.aprovado">pagamento.aprovado</option>
+          <option value="pagamento.recusado">pagamento.recusado</option>
+          <option value="usuario.criado">usuario.criado</option>
+          <option value="pedido.enviado">pedido.enviado</option>
+          <option value="assinatura.cancelada">assinatura.cancelada</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="field-label">Payload JSON</div>
+      <textarea id="payload"></textarea>
+    </div>
+
+    <button class="btn-fire" id="btn" onclick="disparar()">
+      DISPARAR WEBHOOK
+    </button>
+
+    <div class="response-box" id="response"></div>
+    <div class="sig-preview" id="sig"></div>
+  </div>
+
+  <!-- ── Receiver ── -->
+  <div class="receiver-panel">
+    <div class="receiver-header">
+      <div class="panel-tag receiver" style="flex:1">
+        <span class="pill">RECEIVER</span>
+        <span>POST /webhooks/receive/signed</span>
+        <span class="line"></span>
+      </div>
+      <span class="event-count" id="count">0 eventos</span>
+      <button class="btn-clear" onclick="limpar()">limpar</button>
+    </div>
+
+    <div class="event-list" id="list">
+      <div class="empty">
+        <span class="icon">&#x1f4e1;</span>
+        Aguardando webhooks...<br>
+        <span style="opacity:0.5;font-size:0.65rem">Dispare um evento ao lado</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const PAYLOADS = {
+  "pagamento.aprovado":   { cliente: "Joao Silva", valor: 349.90, metodo: "pix", pedido_id: "PED-042" },
+  "pagamento.recusado":   { cliente: "Maria Souza", valor: 89.90, motivo: "saldo insuficiente" },
+  "usuario.criado":       { email: "novo@exemplo.com", nome: "Pedro Alves", plano: "pro" },
+  "pedido.enviado":       { pedido_id: "PED-043", transportadora: "Correios", rastreio: "BR987654321" },
+  "assinatura.cancelada": { cliente: "Ana Lima", plano: "enterprise", motivo: "solicitacao do cliente" },
+};
+
+function atualizarPayload() {
+  const ev = document.getElementById("evento").value;
+  document.getElementById("payload").value = JSON.stringify(PAYLOADS[ev] || {}, null, 2);
+}
+atualizarPayload();
+
+async function disparar() {
+  const btn = document.getElementById("btn");
+  const evento = document.getElementById("evento").value;
+  let payload;
+  try {
+    payload = JSON.parse(document.getElementById("payload").value);
+  } catch {
+    mostrarResposta({ erro: "JSON invalido" }, false);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "ENVIANDO...";
+
+  try {
+    const res = await fetch("/webhooks/trigger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ evento, payload }),
+    });
+    const data = await res.json();
+    mostrarResposta(data, res.ok && data.enviado);
+    if (data.assinatura) {
+      const sig = document.getElementById("sig");
+      sig.textContent = "HMAC-SHA256 \u2192 " + data.assinatura;
+      sig.style.display = "block";
+    }
+  } catch (e) {
+    mostrarResposta({ erro: e.message }, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "DISPARAR WEBHOOK";
+  }
+}
+
+function mostrarResposta(data, ok) {
+  const box = document.getElementById("response");
+  box.textContent = JSON.stringify(data, null, 2);
+  box.className = "response-box " + (ok ? "ok" : "err");
+  box.style.display = "block";
+}
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+let total = 0;
+const sseStatus = document.getElementById("sse-status");
+const src = new EventSource("/webhooks/stream");
+
+src.onopen = () => {
+  sseStatus.className = "live";
+  sseStatus.innerHTML = '<div class="live-dot"></div> SSE conectado';
+};
+
+src.onmessage = (e) => inserirEvento(JSON.parse(e.data));
+
+src.onerror = () => {
+  sseStatus.className = "live disconnected";
+  sseStatus.innerHTML = '<div class="live-dot"></div> SSE reconectando...';
+};
+
+function inserirEvento(ev) {
+  const list = document.getElementById("list");
+  const empty = list.querySelector(".empty");
+  if (empty) empty.remove();
+  if (document.getElementById("ev-" + ev.id)) return;
+
+  total++;
+  document.getElementById("count").textContent = total + (total === 1 ? " evento" : " eventos");
+
+  const ok = ev.status === "processado";
+  const card = document.createElement("div");
+  card.id = "ev-" + ev.id;
+  card.className = "event-card" + (ok ? "" : " rejeitado");
+  card.innerHTML = `
+    <div class="card-top">
+      <span class="card-evento">${ev.evento}</span>
+      <span class="badge ${ok ? "ok" : "err"}">${ev.status}</span>
+      <span class="card-time">${ev.horario}</span>
+    </div>
+    <div class="card-resultado">${ev.resultado || ev.motivo || ""}</div>
+    ${ev.payload && Object.keys(ev.payload).length > 0 ? `
+      <button class="payload-btn" onclick="togglePayload(this)">ver payload &#x25b8;</button>
+      <pre class="payload">${JSON.stringify(ev.payload, null, 2)}</pre>
+    ` : ""}
+  `;
+  list.prepend(card);
+}
+
+function togglePayload(btn) {
+  const pre = btn.nextElementSibling;
+  const show = pre.style.display !== "block";
+  pre.style.display = show ? "block" : "none";
+  btn.innerHTML = show ? "ocultar payload &#x25be;" : "ver payload &#x25b8;";
+}
+
+function limpar() {
+  document.getElementById("list").innerHTML =
+    '<div class="empty"><span class="icon">&#x1f4e1;</span>Log limpo. Aguardando novos eventos...</div>';
+  total = 0;
+  document.getElementById("count").textContent = "0 eventos";
+  document.getElementById("response").style.display = "none";
+  document.getElementById("sig").style.display = "none";
+}
+</script>
+</body>
+</html>
