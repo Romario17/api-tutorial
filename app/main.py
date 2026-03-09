@@ -13,10 +13,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.database import init_db
 from app.routers import items, users, webhooks, websocket
+from app.routers import sse
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -50,11 +52,37 @@ app.include_router(items.router)
 app.include_router(users.router)
 app.include_router(webhooks.router)
 app.include_router(websocket.router)
+app.include_router(sse.router)
 
 
-@app.get("/", tags=["Root"], summary="Raiz da API")
-async def root():
-    """Endpoint de boas-vindas. Confirma que a API está no ar."""
+@app.get("/", tags=["Root"], summary="Home", include_in_schema=False)
+async def home(request: Request):
+    """Página inicial — hub central do frontend."""
+    return templates.TemplateResponse(request, "home.html")
+
+
+# ---------------------------------------------------------------------------
+# Autenticação — páginas de login e cadastro
+# ---------------------------------------------------------------------------
+
+
+@app.get("/login", tags=["Auth"], summary="Página de Login",
+         include_in_schema=False)
+async def login_page(request: Request):
+    """Tela de login com JWT."""
+    return templates.TemplateResponse(request, "login.html")
+
+
+@app.get("/register", tags=["Auth"], summary="Página de Cadastro",
+         include_in_schema=False)
+async def register_page(request: Request):
+    """Tela de cadastro de novo usuário."""
+    return templates.TemplateResponse(request, "register.html")
+
+
+@app.get("/api", tags=["Root"], summary="Status da API")
+async def api_status():
+    """Retorna status JSON da API. Útil para healthcheck e integrações."""
     return {
         "message": "Bem-vindo à API Tutorial! Acesse /docs para a documentação interativa.",
         "docs": "/docs",
@@ -69,31 +97,52 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
-# Páginas HTML para testar WebSocket (Jinja2 Templates)
+# Páginas HTML — interface frontend (SPA-style)
 # ---------------------------------------------------------------------------
 
 
-@app.get("/ws/test/echo", tags=["WebSocket (Avançado)"], summary="Página de teste – Echo",
+@app.get("/ws", tags=["WebSocket (Avançado)"], summary="WebSocket — Echo & Chat",
          include_in_schema=False)
-async def ws_test_echo(request: Request):
-    """Renderiza página HTML para testar o WebSocket de eco."""
-    return templates.TemplateResponse(request, "ws_echo.html")
+async def ws_page(request: Request):
+    """Interface WebSocket unificada com Echo e Chat em abas sem reload."""
+    return templates.TemplateResponse(request, "ws.html")
 
 
-@app.get("/ws/test/chat", tags=["WebSocket (Avançado)"], summary="Página de teste – Chat",
+@app.get("/ws/test", include_in_schema=False)
+async def ws_test_redirect():
+    """Redireciona URL legada para a nova rota."""
+    return RedirectResponse(url="/ws", status_code=301)
+
+
+@app.get("/ws/test/echo", include_in_schema=False)
+async def ws_test_echo_redirect():
+    return RedirectResponse(url="/ws#echo", status_code=301)
+
+
+@app.get("/ws/test/chat", include_in_schema=False)
+async def ws_test_chat_redirect():
+    return RedirectResponse(url="/ws#chat", status_code=301)
+
+
+# ---------------------------------------------------------------------------
+# Páginas HTML — Webhooks
+# ---------------------------------------------------------------------------
+
+
+@app.get("/webhooks", tags=["Webhooks (Avançado)"],
+         summary="Webhooks — interface de disparo e monitoramento",
          include_in_schema=False)
-async def ws_test_chat(request: Request):
-    """Renderiza página HTML para testar o WebSocket de chat."""
-    return templates.TemplateResponse(request, "ws_chat.html")
+async def webhooks_page(request: Request):
+    """Interface de webhooks: disparo, assinatura HMAC e stream de eventos SSE."""
+    return templates.TemplateResponse(request, "webhooks.html")
 
 
-# ---------------------------------------------------------------------------
-# Página HTML para testar Webhooks (Jinja2 Templates)
-# ---------------------------------------------------------------------------
+@app.get("/webhooks/test", include_in_schema=False)
+async def webhooks_test_redirect():
+    """Redireciona URL legada para a nova rota."""
+    return RedirectResponse(url="/webhooks", status_code=301)
 
+if __name__ == "__main__":
+    import uvicorn
 
-@app.get("/webhooks/test", tags=["Webhooks (Avançado)"],
-         summary="Página de teste – Webhooks", include_in_schema=False)
-async def webhook_test_page(request: Request):
-    """Renderiza página HTML para testar o fluxo completo de webhooks."""
-    return templates.TemplateResponse(request, "webhook_test.html")
+    uvicorn.run("app.main:app", host="localhost", port=8000, reload=True)

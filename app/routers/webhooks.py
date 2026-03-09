@@ -18,7 +18,6 @@ import hmac
 import json
 import os
 import time
-from collections import deque
 from collections.abc import AsyncIterable
 from datetime import datetime, timezone
 from typing import Any
@@ -30,22 +29,15 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from httpx import ASGITransport
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/webhooks", tags=["Webhooks (Avançado)"])
+from app.models import WebhookEventDocument
 
-# Armazena os últimos eventos recebidos (em memória, para fins didáticos)
-_received_events: list[dict[str, Any]] = []
+router = APIRouter(prefix="/webhooks", tags=["Webhooks (Avançado)"])
 
 # Chave secreta para validação de assinatura (em produção, use variável de ambiente)
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "minha-chave-secreta")
 
-# Histórico de eventos para SSE (últimos 50 eventos com formato enriquecido)
-_event_history: deque[dict[str, Any]] = deque(maxlen=50)
-
-# Lista de filas para assinantes SSE conectados
+# Lista de filas para assinantes SSE conectados (runtime — não persiste)
 _subscribers: list[asyncio.Queue] = []
-
-
-# ── Models ────────────────────────────────────────────────────────────────────
 
 
 class WebhookPayload(BaseModel):
@@ -68,9 +60,6 @@ class TriggerRequest(BaseModel):
 
     evento: str = Field(..., description="Tipo do evento (ex: 'pagamento.aprovado')")
     payload: dict[str, Any] = Field(default_factory=dict, description="Dados do evento")
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def verify_signature(payload_body: bytes, signature: str, secret: str) -> bool:
@@ -114,23 +103,42 @@ def _process_event(event_type: str, data: dict[str, Any]) -> str:
 def _build_sse_event(
     event_type: str,
     data: dict[str, Any],
-    status: str = "processado",
+    evt_status: str = "processado",
     reason: str | None = None,
 ) -> dict[str, Any]:
     """Cria um evento no formato enriquecido para SSE e histórico."""
-    resultado = _process_event(event_type, data) if status == "processado" else None
+    resultado = _process_event(event_type, data) if evt_status == "processado" else None
     return {
         "id": int(time.time() * 1000),
         "horario": datetime.now(timezone.utc).strftime("%H:%M:%S"),
         "evento": event_type,
-        "status": status,
+        "status": evt_status,
         "resultado": resultado,
         "motivo": reason,
         "payload": data,
     }
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+async def _persist_event(
+    event_type: str,
+    data: dict[str, Any],
+    evt_status: str = "processado",
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Persiste o evento no MongoDB e retorna o dict SSE."""
+    sse_event = _build_sse_event(event_type, data, evt_status, reason)
+    resultado = _process_event(event_type, data) if evt_status == "processado" else None
+
+    await WebhookEventDocument(
+        event_type=event_type,
+        payload=data,
+        status=evt_status,
+        result=resultado,
+        reason=reason,
+        received_at=datetime.now(timezone.utc),
+    ).insert()
+
+    return sse_event
 
 
 @router.post(
@@ -146,10 +154,8 @@ async def receive_webhook(payload: WebhookPayload):
     Útil para testes rápidos e desenvolvimento.
     """
     now = datetime.now(timezone.utc).isoformat()
-    _received_events.append({"event": payload.event, "data": payload.data, "received_at": now})
 
-    sse_event = _build_sse_event(payload.event, payload.data)
-    _event_history.appendleft(sse_event)
+    sse_event = await _persist_event(payload.event, payload.data)
     await _broadcast(sse_event)
 
     return WebhookResponse(status="received", event=payload.event, received_at=now)
@@ -174,10 +180,9 @@ async def receive_signed_webhook(
     body = await request.body()
 
     if not verify_signature(body, x_webhook_signature, WEBHOOK_SECRET):
-        sse_event = _build_sse_event(
-            "desconhecido", {}, status="rejeitado", reason="Assinatura inválida"
+        sse_event = await _persist_event(
+            "desconhecido", {}, evt_status="rejeitado", reason="Assinatura inválida"
         )
-        _event_history.appendleft(sse_event)
         await _broadcast(sse_event)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -186,10 +191,8 @@ async def receive_signed_webhook(
 
     payload = json.loads(body)
     now = datetime.now(timezone.utc).isoformat()
-    _received_events.append({"event": payload["event"], "data": payload.get("data", {}), "received_at": now})
 
-    sse_event = _build_sse_event(payload["event"], payload.get("data", {}))
-    _event_history.appendleft(sse_event)
+    sse_event = await _persist_event(payload["event"], payload.get("data", {}))
     await _broadcast(sse_event)
 
     return WebhookResponse(status="received", event=payload["event"], received_at=now)
@@ -240,17 +243,35 @@ async def sse_stream() -> AsyncIterable[ServerSentEvent]:
     """
     Server-Sent Events — push de eventos em tempo real para o frontend.
 
-    Ao conectar, recebe o histórico recente e, em seguida, todos os novos
-    eventos conforme são recebidos.
+    Ao conectar, recebe o histórico recente do banco de dados e, em seguida,
+    todos os novos eventos conforme são recebidos.
     """
     queue: asyncio.Queue = asyncio.Queue()
     _subscribers.append(queue)
     try:
-        for ev in reversed(list(_event_history)):
-            yield ServerSentEvent(data=json.dumps(ev), id=str(ev["id"]))
+        # Envia os últimos 50 eventos do banco (mais recentes primeiro, depois inverte)
+        history = (
+            await WebhookEventDocument
+            .find()
+            .sort("-id")
+            .limit(50)
+            .to_list()
+        )
+        history.reverse()
+        for doc in history:
+            ev = {
+                "id": int(doc.received_at.timestamp() * 1000) if doc.received_at else 0,
+                "horario": doc.received_at.strftime("%H:%M:%S") if doc.received_at else "",
+                "evento": doc.event_type,
+                "status": doc.status,
+                "resultado": doc.result,
+                "motivo": doc.reason,
+                "payload": doc.payload,
+            }
+            yield ServerSentEvent(data=ev, id=str(ev["id"]))
         while True:
             ev = await queue.get()
-            yield ServerSentEvent(data=json.dumps(ev), id=str(ev["id"]))
+            yield ServerSentEvent(data=ev, id=str(ev["id"]))
     finally:
         _subscribers.remove(queue)
 
@@ -261,8 +282,16 @@ async def sse_stream() -> AsyncIterable[ServerSentEvent]:
     summary="Listar eventos recebidos",
 )
 async def list_events():
-    """Retorna todos os webhooks recebidos (armazenados em memória)."""
-    return _received_events
+    """Retorna todos os webhooks recebidos (armazenados no MongoDB)."""
+    docs = await WebhookEventDocument.find().sort("-id").to_list()
+    return [
+        {
+            "event": doc.event_type,
+            "data": doc.payload,
+            "received_at": doc.received_at.isoformat() if doc.received_at else None,
+        }
+        for doc in docs
+    ]
 
 
 @router.delete(
@@ -271,6 +300,5 @@ async def list_events():
     summary="Limpar eventos",
 )
 async def clear_events():
-    """Remove todos os eventos recebidos da memória."""
-    _received_events.clear()
-    _event_history.clear()
+    """Remove todos os eventos de webhook do banco de dados."""
+    await WebhookEventDocument.delete_all()

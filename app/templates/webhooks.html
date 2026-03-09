@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Webhook Test - API Tutorial</title>
+<title>Webhooks — API Tutorial</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Bebas+Neue&display=swap');
 
@@ -49,6 +49,9 @@ body::before {
   border-bottom: 1px solid var(--border);
   font-size: 0.65rem;
   letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
 }
 
 .top-nav a {
@@ -59,6 +62,21 @@ body::before {
 
 .top-nav a:hover { color: var(--sender); }
 .top-nav a.active { color: var(--sender); }
+
+/* ── Notification bell ── */
+.notif-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 .1rem;
+  opacity: .35;
+  transition: opacity .15s;
+}
+.notif-btn:hover                { opacity: 1; }
+.notif-btn[data-state="granted"] { opacity: 1; }
 
 /* ── Header ── */
 header {
@@ -393,12 +411,17 @@ pre.payload {
 </style>
 </head>
 <body>
+<script>if(!localStorage.getItem('token'))location.href='/login';</script>
 
 <nav class="top-nav">
-  <a href="/">&larr; API</a> &nbsp;|&nbsp;
-  <a href="/ws/test/echo">Echo</a> &nbsp;|&nbsp;
-  <a href="/ws/test/chat">Chat</a> &nbsp;|&nbsp;
-  <a href="/webhooks/test" class="active">Webhooks</a>
+  <a href="/">Home</a> &nbsp;|&nbsp;
+  <a href="/ws">WebSocket</a> &nbsp;|&nbsp;
+  <a href="/webhooks" class="active">Webhooks</a> &nbsp;|&nbsp;
+  <a href="/docs">Docs</a>
+  <button class="notif-btn" id="notif-btn"
+          title="Ativar notificações de chat"
+          aria-label="Notificações de chat">&#x1F514;</button>
+  <a href="#" id="logout-link" style="margin-left:.6rem;color:var(--red);font-size:.6rem;">Sair</a>
 </nav>
 
 <header>
@@ -602,6 +625,97 @@ function limpar() {
   document.getElementById("response").style.display = "none";
   document.getElementById("sig").style.display = "none";
 }
+</script>
+
+<script>
+/* ── Chat notifications via SSE ─────────────────────────────────── */
+(function () {
+  if (!('Notification' in window) || !window.EventSource) return;
+
+  let es = null;
+  let reconnectDelay = 1000;
+
+  function showDeniedBanner() {
+    if (document.getElementById('notif-denied-banner')) return;
+    const isFirefox = navigator.userAgent.includes('Firefox');
+    const isChrome  = navigator.userAgent.includes('Chrome');
+    const instruction = isFirefox
+      ? 'Clique no ícone de cadeado na barra de endereço → Permissões → Notificações → Permitir.'
+      : isChrome
+      ? 'Clique no ícone de cadeado na barra de endereço → Configurações do site → Notificações → Permitir.'
+      : 'Acesse as configurações do site no seu browser e permita notificações para esta página.';
+    const b = document.createElement('div');
+    b.id = 'notif-denied-banner';
+    b.setAttribute('role', 'alert');
+    b.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;'
+      + 'background:#1a1a0e;border:1px solid #c0392b;color:#e8e8d0;'
+      + 'font-family:monospace;font-size:.78rem;padding:.75rem 1rem;'
+      + 'max-width:320px;line-height:1.5;box-shadow:0 0 12px rgba(192,57,43,.4);';
+    b.innerHTML = '<strong style="color:#c0392b">\uD83D\uDD15 Notificações bloqueadas</strong><br>'
+      + '<span style="color:#a0a080">' + instruction + '</span><br>'
+      + '<button onclick="this.parentElement.remove()" style="margin-top:.5rem;background:transparent;'
+      + 'border:1px solid #555;color:#a0a080;font-family:monospace;cursor:pointer;padding:.2rem .5rem">fechar</button>';
+    document.body.appendChild(b);
+    setTimeout(() => b?.remove(), 12000);
+  }
+
+  function onChatMessage(e) {
+    if (Notification.permission !== 'granted') return;
+    try {
+      const { username, text, ts } = JSON.parse(e.data);
+      const n = new Notification('\u{1F4AC} ' + username + ' [' + ts + ']', {
+        body: text, tag: 'chat-msg', renotify: true, silent: false,
+      });
+      n.onclick = () => { window.focus(); location.href = '/ws#chat'; n.close(); };
+    } catch {}
+  }
+
+  function startSSE() {
+    if (es && es.readyState !== EventSource.CLOSED) return;
+    es = new EventSource('/sse/notifications');
+    es.addEventListener('chat-message', onChatMessage);
+    es.onopen  = () => { reconnectDelay = 1000; };
+    es.onerror = () => {
+      es.close(); es = null;
+      setTimeout(startSSE, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    };
+  }
+
+  function applyPermission(perm) {
+    const btn = document.getElementById('notif-btn');
+    if (!btn) return;
+    if (perm === 'granted') {
+      btn.innerHTML = '&#x1F514;'; btn.title = 'Notificações ativadas';
+      btn.dataset.state = 'granted'; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+    } else if (perm === 'denied') {
+      btn.innerHTML = '&#x1F515;'; btn.title = 'Notificações bloqueadas — clique para ver como resolver';
+      btn.dataset.state = 'denied'; btn.style.opacity = '0.5'; btn.style.cursor = 'help';
+    } else {
+      btn.innerHTML = '&#x1F514;'; btn.title = 'Clique para ativar notificações de chat';
+      btn.dataset.state = 'default'; btn.style.opacity = '0.35'; btn.style.cursor = 'pointer';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    startSSE();
+    applyPermission(Notification.permission);
+    document.getElementById('notif-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('notif-btn');
+      if (btn.dataset.state === 'denied') { showDeniedBanner(); return; }
+      if (Notification.permission === 'granted') return;
+      applyPermission(await Notification.requestPermission());
+    });
+  });
+})();
+</script>
+<script>
+document.getElementById('logout-link')?.addEventListener('click', e => {
+  e.preventDefault();
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  location.href = '/login';
+});
 </script>
 </body>
 </html>

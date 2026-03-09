@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Tutorial</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Bebas+Neue&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0c0f0a;
+  --surface: #141810;
+  --border:  #252d1e;
+  --sender:  #c8f53a;
+  --receiver:#3af5a0;
+  --red:     #f53a5a;
+  --text:    #d4e8c0;
+  --muted:   #5a7048;
+  --mono:    'Fragment Mono', monospace;
+  --display: 'Bebas Neue', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+}
+
+/* ── Grid overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(200,245,58,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,245,58,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Nav ── */
+.top-nav {
+  position: relative;
+  z-index: 1;
+  padding: .5rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: .65rem;
+  letter-spacing: .1em;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.top-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color .15s;
+}
+.top-nav a:hover  { color: var(--sender); }
+.top-nav a.active { color: var(--sender); }
+
+/* ── Notification bell ── */
+.notif-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 .1rem;
+  opacity: .35;
+  transition: opacity .15s;
+}
+.notif-btn:hover                { opacity: 1; }
+.notif-btn[data-state="granted"] { opacity: 1; }
+
+/* ── Hero header ── */
+header {
+  position: relative;
+  z-index: 1;
+  padding: 3rem 2rem 2.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+header h1 {
+  font-family: var(--display);
+  font-size: clamp(2.8rem, 6vw, 5rem);
+  letter-spacing: .08em;
+  color: var(--sender);
+  line-height: 1;
+}
+
+header p {
+  font-size: .7rem;
+  color: var(--muted);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  max-width: 520px;
+  line-height: 1.8;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  border: 1px solid var(--border);
+  padding: .2rem .75rem;
+  font-size: .58rem;
+  letter-spacing: .15em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.version-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--receiver);
+  box-shadow: 0 0 7px var(--receiver);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* ── Main grid ── */
+main {
+  position: relative;
+  z-index: 1;
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Section label ── */
+.section-label {
+  font-size: .58rem;
+  letter-spacing: .25em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  margin-bottom: 1rem;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Card grid ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+  text-decoration: none;
+  color: inherit;
+  transition: background .15s;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(200,245,58,.03), transparent 60%);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.card:hover { background: #181f12; }
+.card:hover::before { opacity: 1; }
+
+.card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+.card-pill {
+  padding: .15rem .6rem;
+  border: 1px solid;
+  font-size: .55rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.card-pill.ws     { border-color: var(--sender);   color: var(--sender); }
+.card-pill.wh     { border-color: var(--receiver); color: var(--receiver); }
+.card-pill.api    { border-color: var(--muted);    color: var(--muted); }
+
+.card-title {
+  font-family: var(--display);
+  font-size: 1.7rem;
+  letter-spacing: .06em;
+  line-height: 1;
+}
+.card-title.ws  { color: var(--sender); }
+.card-title.wh  { color: var(--receiver); }
+.card-title.api { color: var(--text); }
+
+.card-desc {
+  font-size: .68rem;
+  color: var(--muted);
+  line-height: 1.75;
+  flex: 1;
+}
+
+.card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  border-top: 1px solid var(--border);
+  padding-top: .85rem;
+  margin-top: .15rem;
+}
+.card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .6rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: .25rem .7rem;
+  transition: border-color .15s, color .15s;
+}
+.card-link:hover { border-color: var(--sender); color: var(--sender); }
+.card-link.receiver:hover { border-color: var(--receiver); color: var(--receiver); }
+.arrow { font-size: .65rem; }
+
+/* ── Endpoint list ── */
+.endpoint-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+.endpoint-item {
+  background: var(--surface);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  font-size: .65rem;
+  line-height: 1.6;
+}
+.method {
+  flex-shrink: 0;
+  font-size: .55rem;
+  letter-spacing: .1em;
+  padding: .2rem .55rem;
+  border: 1px solid;
+  margin-top: .1rem;
+}
+.method.GET    { border-color: var(--receiver); color: var(--receiver); }
+.method.POST   { border-color: var(--sender);   color: var(--sender); }
+.method.PUT    { border-color: #f5a83a;          color: #f5a83a; }
+.method.DELETE { border-color: var(--red);       color: var(--red); }
+.method.WS     { border-color: #a03af5;          color: #a03af5; }
+.endpoint-path { color: var(--text); }
+.endpoint-desc { color: var(--muted); font-size: .62rem; }
+
+/* ── Footer ── */
+footer {
+  position: relative;
+  z-index: 1;
+  padding: 1rem 2rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: .58rem;
+  letter-spacing: .12em;
+  color: var(--muted);
+  text-align: center;
+  text-transform: uppercase;
+}
+footer a { color: var(--muted); text-decoration: none; }
+footer a:hover { color: var(--sender); }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  header { padding: 2rem 1rem 1.5rem; }
+  main   { padding: 1.5rem 1rem; }
+  .card-grid, .endpoint-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<script>if(!localStorage.getItem('token'))location.href='/login';</script>
+
+<nav class="top-nav">
+  <a href="/" class="active">API Tutorial</a>
+  &nbsp;|&nbsp;
+  <a href="/ws">WebSocket</a>
+  &nbsp;|&nbsp;
+  <a href="/webhooks">Webhooks</a>
+  &nbsp;|&nbsp;
+  <a href="/docs">Docs</a>
+  <button class="notif-btn" id="notif-btn"
+          title="Ativar notificações de chat"
+          aria-label="Notificações de chat">&#x1F514;</button>
+  <a href="#" id="logout-link" style="margin-left:.6rem;color:var(--red);font-size:.6rem;">Sair</a>
+</nav>
+
+<header>
+  <span class="version-badge">
+    <span class="version-dot"></span>
+    v2.0.0 &nbsp;·&nbsp; online
+  </span>
+  <h1>API TUTORIAL</h1>
+  <p>Aplicação de exemplo para a oficina de FastAPI — CRUD com MongoDB, WebSockets e Webhooks.</p>
+</header>
+
+<main>
+
+  <!-- ── Ferramentas interativas ── -->
+  <section>
+    <div class="section-label">Ferramentas interativas</div>
+    <div class="card-grid">
+
+      <a class="card" href="/ws">
+        <div class="card-tag">
+          <span class="card-pill ws">WebSocket</span>
+        </div>
+        <div class="card-title ws">WEBSOCKET TEST</div>
+        <p class="card-desc">
+          Conexão bidirecional em tempo real. Teste o echo de mensagens
+          ou entre no chat multi-usuário — ambos sem reload de página.
+        </p>
+        <div class="card-links">
+          <a class="card-link" href="/ws#echo">Echo <span class="arrow">→</span></a>
+          <a class="card-link" href="/ws#chat">Chat <span class="arrow">→</span></a>
+        </div>
+      </a>
+
+      <a class="card" href="/webhooks">
+        <div class="card-tag">
+          <span class="card-pill wh">Webhook</span>
+        </div>
+        <div class="card-title wh">WEBHOOK TEST</div>
+        <p class="card-desc">
+          Dispare webhooks com assinatura HMAC-SHA256, acompanhe o fluxo
+          completo em tempo real via SSE e inspecione cada evento recebido.
+        </p>
+        <div class="card-links">
+          <a class="card-link receiver" href="/webhooks">Abrir <span class="arrow">→</span></a>
+        </div>
+      </a>
+
+      <a class="card" href="/docs">
+        <div class="card-tag">
+          <span class="card-pill api">OpenAPI</span>
+        </div>
+        <div class="card-title api">API DOCS</div>
+        <p class="card-desc">
+          Documentação interativa Swagger UI gerada automaticamente pelo FastAPI.
+          Explore e execute todos os endpoints da API.
+        </p>
+        <div class="card-links">
+          <a class="card-link" href="/docs">Swagger <span class="arrow">→</span></a>
+          <a class="card-link" href="/redoc">ReDoc <span class="arrow">→</span></a>
+        </div>
+      </a>
+
+    </div>
+  </section>
+
+  <!-- ── Endpoints disponíveis ── -->
+  <section>
+    <div class="section-label">Endpoints disponíveis</div>
+    <div class="endpoint-grid">
+
+      <div class="endpoint-item">
+        <span class="method GET">GET</span>
+        <div>
+          <div class="endpoint-path">/items</div>
+          <div class="endpoint-desc">Lista todos os itens com paginação</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method POST">POST</span>
+        <div>
+          <div class="endpoint-path">/items</div>
+          <div class="endpoint-desc">Cria um novo item</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method PUT">PUT</span>
+        <div>
+          <div class="endpoint-path">/items/{id}</div>
+          <div class="endpoint-desc">Atualiza um item pelo ID</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method DELETE">DELETE</span>
+        <div>
+          <div class="endpoint-path">/items/{id}</div>
+          <div class="endpoint-desc">Remove um item pelo ID</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method GET">GET</span>
+        <div>
+          <div class="endpoint-path">/users</div>
+          <div class="endpoint-desc">Lista todos os usuários</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method POST">POST</span>
+        <div>
+          <div class="endpoint-path">/users</div>
+          <div class="endpoint-desc">Cria um novo usuário</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method WS">WS</span>
+        <div>
+          <div class="endpoint-path">/ws/echo</div>
+          <div class="endpoint-desc">WebSocket de eco de mensagens</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method WS">WS</span>
+        <div>
+          <div class="endpoint-path">/ws/chat</div>
+          <div class="endpoint-desc">WebSocket de chat multi-usuário</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method POST">POST</span>
+        <div>
+          <div class="endpoint-path">/webhooks/trigger</div>
+          <div class="endpoint-desc">Dispara um webhook com assinatura HMAC</div>
+        </div>
+      </div>
+      <div class="endpoint-item">
+        <span class="method GET">GET</span>
+        <div>
+          <div class="endpoint-path">/webhooks/stream</div>
+          <div class="endpoint-desc">SSE — stream de eventos recebidos</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  FastAPI Tutorial &nbsp;·&nbsp;
+  <a href="https://github.com/Romario17/api-tutorial" target="_blank" rel="noopener">GitHub</a>
+  &nbsp;·&nbsp;
+  <a href="/api">JSON status</a>
+</footer>
+
+<script>
+/* ── Chat notifications via SSE ─────────────────────────────────── */
+(function () {
+  if (!('Notification' in window) || !window.EventSource) return;
+
+  let es = null;
+  let reconnectDelay = 1000;
+
+  function showDeniedBanner() {
+    if (document.getElementById('notif-denied-banner')) return;
+    const isFirefox = navigator.userAgent.includes('Firefox');
+    const isChrome  = navigator.userAgent.includes('Chrome');
+    const instruction = isFirefox
+      ? 'Clique no ícone de cadeado na barra de endereço → Permissões → Notificações → Permitir.'
+      : isChrome
+      ? 'Clique no ícone de cadeado na barra de endereço → Configurações do site → Notificações → Permitir.'
+      : 'Acesse as configurações do site no seu browser e permita notificações para esta página.';
+    const b = document.createElement('div');
+    b.id = 'notif-denied-banner';
+    b.setAttribute('role', 'alert');
+    b.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;'
+      + 'background:#1a1a0e;border:1px solid #c0392b;color:#e8e8d0;'
+      + 'font-family:monospace;font-size:.78rem;padding:.75rem 1rem;'
+      + 'max-width:320px;line-height:1.5;box-shadow:0 0 12px rgba(192,57,43,.4);';
+    b.innerHTML = '<strong style="color:#c0392b">\uD83D\uDD15 Notificações bloqueadas</strong><br>'
+      + '<span style="color:#a0a080">' + instruction + '</span><br>'
+      + '<button onclick="this.parentElement.remove()" style="margin-top:.5rem;background:transparent;'
+      + 'border:1px solid #555;color:#a0a080;font-family:monospace;cursor:pointer;padding:.2rem .5rem">fechar</button>';
+    document.body.appendChild(b);
+    setTimeout(() => b?.remove(), 12000);
+  }
+
+  function onChatMessage(e) {
+    if (Notification.permission !== 'granted') return;
+    try {
+      const { username, text, ts } = JSON.parse(e.data);
+      const n = new Notification('\u{1F4AC} ' + username + ' [' + ts + ']', {
+        body: text, tag: 'chat-msg', renotify: true, silent: false,
+      });
+      n.onclick = () => { window.focus(); location.href = '/ws#chat'; n.close(); };
+    } catch {}
+  }
+
+  function startSSE() {
+    if (es && es.readyState !== EventSource.CLOSED) return;
+    es = new EventSource('/sse/notifications');
+    es.addEventListener('chat-message', onChatMessage);
+    es.onopen  = () => { reconnectDelay = 1000; };
+    es.onerror = () => {
+      es.close(); es = null;
+      setTimeout(startSSE, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    };
+  }
+
+  function applyPermission(perm) {
+    const btn = document.getElementById('notif-btn');
+    if (!btn) return;
+    if (perm === 'granted') {
+      btn.innerHTML = '&#x1F514;'; btn.title = 'Notificações ativadas';
+      btn.dataset.state = 'granted'; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+    } else if (perm === 'denied') {
+      btn.innerHTML = '&#x1F515;'; btn.title = 'Notificações bloqueadas — clique para ver como resolver';
+      btn.dataset.state = 'denied'; btn.style.opacity = '0.5'; btn.style.cursor = 'help';
+    } else {
+      btn.innerHTML = '&#x1F514;'; btn.title = 'Clique para ativar notificações de chat';
+      btn.dataset.state = 'default'; btn.style.opacity = '0.35'; btn.style.cursor = 'pointer';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    startSSE();
+    applyPermission(Notification.permission);
+    document.getElementById('notif-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('notif-btn');
+      if (btn.dataset.state === 'denied') { showDeniedBanner(); return; }
+      if (Notification.permission === 'granted') return;
+      applyPermission(await Notification.requestPermission());
+    });
+  });
+})();
+</script>
+<script>
+document.getElementById('logout-link')?.addEventListener('click', e => {
+  e.preventDefault();
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  location.href = '/login';
+});
+</script>
+</body>
+</html>

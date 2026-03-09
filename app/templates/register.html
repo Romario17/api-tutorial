@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastro — API Tutorial</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Bebas+Neue&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0c0f0a;
+  --surface: #141810;
+  --border:  #252d1e;
+  --sender:  #c8f53a;
+  --receiver:#3af5a0;
+  --red:     #f53a5a;
+  --text:    #d4e8c0;
+  --muted:   #5a7048;
+  --mono:    'Fragment Mono', monospace;
+  --display: 'Bebas Neue', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(200,245,58,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,245,58,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 2.5rem 2rem 2rem;
+}
+
+.auth-card h1 {
+  font-family: var(--display);
+  font-size: 2.2rem;
+  letter-spacing: .12em;
+  color: var(--sender);
+  text-align: center;
+  margin-bottom: .3rem;
+}
+
+.auth-card .subtitle {
+  text-align: center;
+  font-size: .7rem;
+  color: var(--muted);
+  margin-bottom: 1.8rem;
+}
+
+.field {
+  margin-bottom: 1rem;
+}
+
+.field label {
+  display: block;
+  font-size: .65rem;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: .3rem;
+  text-transform: uppercase;
+}
+
+.field input {
+  width: 100%;
+  padding: .55rem .7rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: .8rem;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.field input:focus {
+  border-color: var(--sender);
+}
+
+.submit-btn {
+  width: 100%;
+  padding: .65rem;
+  margin-top: .5rem;
+  background: var(--sender);
+  color: var(--bg);
+  border: none;
+  font-family: var(--display);
+  font-size: 1.1rem;
+  letter-spacing: .15em;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+
+.submit-btn:hover { opacity: .85; }
+.submit-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.auth-link {
+  display: block;
+  text-align: center;
+  margin-top: 1.2rem;
+  font-size: .7rem;
+  color: var(--muted);
+}
+
+.auth-link a {
+  color: var(--receiver);
+  text-decoration: none;
+}
+
+.auth-link a:hover { text-decoration: underline; }
+
+.error-msg {
+  background: rgba(245,58,90,.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: .72rem;
+  padding: .5rem .7rem;
+  margin-bottom: 1rem;
+  display: none;
+}
+
+.field .hint {
+  font-size: .6rem;
+  color: var(--muted);
+  margin-top: .2rem;
+}
+</style>
+</head>
+<body>
+
+<div class="auth-card">
+  <h1>CADASTRO</h1>
+  <p class="subtitle">Crie sua conta para acessar a API</p>
+
+  <div class="error-msg" id="error"></div>
+
+  <form id="register-form" autocomplete="off">
+    <div class="field">
+      <label for="username">Usuário</label>
+      <input type="text" id="username" name="username" required autofocus
+             placeholder="nome de usuário" minlength="3">
+    </div>
+
+    <div class="field">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" name="email" required
+             placeholder="seu@email.com">
+    </div>
+
+    <div class="field">
+      <label for="password">Senha</label>
+      <input type="password" id="password" name="password" required
+             minlength="6" placeholder="••••••••">
+      <p class="hint">Mínimo 6 caracteres</p>
+    </div>
+
+    <div class="field">
+      <label for="confirm">Confirmar senha</label>
+      <input type="password" id="confirm" name="confirm" required
+             minlength="6" placeholder="••••••••">
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn">CRIAR CONTA</button>
+  </form>
+
+  <p class="auth-link">
+    Já tem conta? <a href="/login">Faça login</a>
+  </p>
+</div>
+
+<script>
+(function () {
+  if (localStorage.getItem('token')) {
+    location.href = '/';
+    return;
+  }
+
+  const form  = document.getElementById('register-form');
+  const error = document.getElementById('error');
+  const btn   = document.getElementById('submit-btn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    error.style.display = 'none';
+
+    const username = document.getElementById('username').value.trim();
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const confirm  = document.getElementById('confirm').value;
+
+    if (password !== confirm) {
+      error.textContent = 'As senhas não conferem';
+      error.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'CRIANDO...';
+
+    try {
+      const resp = await fetch('/users/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json();
+        throw new Error(data.detail || 'Erro ao criar conta');
+      }
+
+      // Cadastro ok → redireciona para login
+      location.href = '/login';
+    } catch (err) {
+      error.textContent = err.message;
+      error.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'CRIAR CONTA';
+    }
+  });
+})();
+</script>
+</body>
+</html>

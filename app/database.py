@@ -16,12 +16,12 @@ import os
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
 
-from app.models import ItemDocument, UserDocument
+from app.models import ChatMessageDocument, ItemDocument, UserDocument, WebhookEventDocument
 
-MONGO_URL: str = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL: str = os.getenv("MONGO_URL", "mongodb://localhost:27217")
 DB_NAME: str = os.getenv("DB_NAME", "api_tutorial")
 
-_DOCUMENT_MODELS = [ItemDocument, UserDocument]
+_DOCUMENT_MODELS = [ItemDocument, UserDocument, ChatMessageDocument, WebhookEventDocument]
 
 
 async def init_db() -> None:
