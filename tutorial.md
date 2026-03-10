@@ -92,19 +92,13 @@ Também é comum usar `PATCH` para atualizações parciais (apenas alguns campos
 ### Instalação
 
 ```python
-# Execute esta célula para instalar as dependências no Colab ou localmente
-!pip install fastapi uvicorn[standard] pydantic httpx --quiet
+# opcional: Criar ambiente virtual (.venv/venv)
+pip install fastapi[standard]
 ```
+
+<!-- Aqui acho q dá pra colocar só pip install fastapi[standard] -->
 
 ### Sua primeira API em 10 linhas
-
-No Colab, usamos `nest_asyncio` para rodar o servidor dentro do notebook.
-
-```python
-!pip install nest-asyncio --quiet
-import nest_asyncio
-nest_asyncio.apply()
-```
 
 ```python
 from fastapi import FastAPI
@@ -112,37 +106,17 @@ import uvicorn
 
 app = FastAPI(title="Minha Primeira API")
 
-
 @app.get("/")
 def root():
     return {"mensagem": "Olá, mundo!"}
 
-
-@app.get("/saudacao/{nome}")
+@app.get("/saudacao")                       # Parametro de query
 def saudar(nome: str):
     return {"saudacao": f"Olá, {nome}!"}
 
-
-# Inicia o servidor em background (útil no notebook)
-import threading
-t = threading.Thread(target=uvicorn.run, args=(app,), kwargs={"port": 8000, "log_level": "warning"})
-t.daemon = True
-t.start()
-print("Servidor rodando em http://127.0.0.1:8000")
-```
-
-```python
-# Testando com requests (equivale a uma chamada de cliente)
-import requests
-
-resp = requests.get("http://127.0.0.1:8000/")
-print("Status:", resp.status_code)
-print("Body: ", resp.json())
-```
-
-```python
-resp = requests.get("http://127.0.0.1:8000/saudacao/FastAPI")
-print(resp.json())
+@app.get("/saudacao/{nome}")                # Parametro de URL
+def saudar(nome: str):
+    return {"saudacao": f"Olá, {nome}!"}
 ```
 
 ### Path parameters × Query parameters
@@ -153,7 +127,7 @@ print(resp.json())
 ```python
 from fastapi import FastAPI
 
-app2 = FastAPI()
+app = FastAPI()
 
 produtos_db = [
     {"id": 1, "nome": "Notebook",  "preco": 3500.0},
@@ -162,12 +136,12 @@ produtos_db = [
 ]
 
 
-@app2.get("/produtos")  # query params: skip e limit
+@app.get("/produtos")  # query params: skip e limit
 def listar_produtos(skip: int = 0, limit: int = 10):
     return produtos_db[skip : skip + limit]
 
 
-@app2.get("/produtos/{produto_id}")  # path param: produto_id
+@app.get("/produtos/{produto_id}")  # path param: produto_id
 def buscar_produto(produto_id: int):
     for p in produtos_db:
         if p["id"] == produto_id:
@@ -178,7 +152,7 @@ def buscar_produto(produto_id: int):
 # Testando diretamente com TestClient (sem iniciar servidor)
 from fastapi.testclient import TestClient
 
-client = TestClient(app2)
+client = TestClient(app)
 
 print("Todos os produtos:", client.get("/produtos").json())
 print("Paginado (skip=1, limit=2):", client.get("/produtos?skip=1&limit=2").json())
