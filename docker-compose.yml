@@ -1,22 +1,54 @@
 services:
+  app:
+    build: .
+    container_name: ticketflow-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_started
+    restart: unless-stopped
+
   mongodb:
-    image: mongodb/mongodb-community-server:8.0.4
-    container_name: mongodb
+    image: mongo:8
+    container_name: ticketflow-mongodb
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    restart: unless-stopped
 
-  api:
-    build: .
-    container_name: api-tutorial
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ticketflow-mailhog
     ports:
-      - "8000:8000"
+      - "1025:1025"   # SMTP (para containers)
+      - "8025:8025"   # UI Web (acesse em http://localhost:8025)
+    restart: unless-stopped
+
+  email-notifier:
+    build: ./services/email-notifier
+    container_name: ticketflow-email-notifier
+    ports:
+      - "8001:8001"
     environment:
-      MONGO_URL: "mongodb://mongodb:27017"
-      DB_NAME: "api_tutorial"
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - FROM_EMAIL=ticketflow@demo.local
+      - NOTIFY_EMAIL=admin@demo.local
+      - WEBHOOK_SECRET=c5926730e852f3c23995fb99f1e321cefb30ed8c7ce8979997ae0f39c1447b72
+      - MAIN_API_URL=http://app:8000
+      - SELF_URL=http://email-notifier:8001/webhook
+      - RETRY_DELAY=3
+      - MAX_RETRIES=20
     depends_on:
-      - mongodb
+      - app
+      - mailhog
+    restart: unless-stopped
 
 volumes:
   mongo_data:

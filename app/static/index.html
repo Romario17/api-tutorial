@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TicketFlow API Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #f1f5f9;
+      --surface:    #ffffff;
+      --surface-2:  #f8fafc;
+      --border:     #e2e8f0;
+      --border-2:   #cbd5e1;
+      --primary:    #3b82f6;
+      --primary-h:  #2563eb;
+      --primary-bg: #eff6ff;
+      --text:       #1e293b;
+      --text-2:     #475569;
+      --text-3:     #94a3b8;
+      --danger:     #ef4444;
+      --danger-h:   #dc2626;
+      --success:    #10b981;
+      --warn:       #f59e0b;
+      --purple:     #8b5cf6;
+      --topbar-h:   56px;
+      --radius:     0.75rem;
+      --radius-sm:  0.5rem;
+      --shadow:     0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06);
+      --shadow-md:  0 4px 6px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.06);
+      --shadow-lg:  0 10px 15px rgba(0,0,0,.08),0 4px 6px rgba(0,0,0,.05);
+    }
+
+    html, body { height: 100%; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 0.875rem; line-height: 1.5; }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; height: var(--topbar-h);
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1.25rem; z-index: 100; box-shadow: var(--shadow);
+      gap: 1rem;
+    }
+    .topbar-left  { display: flex; align-items: center; gap: 0.75rem; }
+    .topbar-center { display: flex; align-items: center; gap: 0.5rem; }
+    .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+
+    .topbar-logo { font-weight: 700; font-size: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+    .topbar-logo i { color: var(--primary); }
+    .topbar-subtitle { font-size: 0.7rem; color: var(--text-3); display: inline; }
+
+    /* ── SSE indicator ── */
+    .sse-indicator {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 9999px; padding: 0.25rem 0.75rem;
+      font-size: 0.75rem; font-weight: 500; color: var(--text-2);
+      cursor: default;
+    }
+    .sse-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border-2); flex-shrink: 0;
+    }
+    .sse-dot.on { background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 2px rgba(16,185,129,.2); }
+      50%      { box-shadow: 0 0 0 5px rgba(16,185,129,.05); }
+    }
+    .sse-indicator .sse-btn-link {
+      background: none; border: none; cursor: pointer; font-size: 0.72rem;
+      color: var(--primary); font-weight: 600; padding: 0; font-family: inherit;
+    }
+    .sse-indicator .sse-btn-link:hover { text-decoration: underline; }
+    .sse-indicator .sse-btn-link.danger { color: var(--danger); }
+
+    /* ── User chip ── */
+    .user-chip {
+      display: none; align-items: center; gap: 0.4rem;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 9999px; padding: 0.3rem 0.75rem 0.3rem 0.5rem;
+      font-size: 0.8rem; font-weight: 500; color: var(--text-2);
+    }
+    .user-chip i { color: var(--primary); font-size: 0.85rem; }
+
+    /* ── Icon buttons (auth, webhook, notif) ── */
+    .icon-btn {
+      background: none; border: none; cursor: pointer;
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-2); font-size: 1rem;
+      transition: background .15s, color .15s; position: relative;
+    }
+    .icon-btn:hover { background: var(--bg); color: var(--primary); }
+    .icon-btn.active { color: var(--primary); }
+
+    /* ── Notification badge ── */
+    .notif-count {
+      position: absolute; top: 2px; right: 2px;
+      background: var(--danger); color: #fff; font-size: 0.6rem; font-weight: 700;
+      min-width: 16px; height: 16px; border-radius: 9999px;
+      display: none; align-items: center; justify-content: center;
+      padding: 0 3px; line-height: 1; border: 2px solid var(--surface);
+    }
+
+    /* ── Bell: estado SSE desconectado ── */
+    .icon-btn.bell-off { color: var(--warn); }
+    .icon-btn.bell-off:hover { color: var(--warn); background: #fef3c7; }
+    .icon-btn.bell-muted { opacity: .45; }
+
+    /* ── Toggle switch ── */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.65rem 0; border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 0.83rem; font-weight: 500; color: var(--text); }
+    .toggle-sub   { font-size: 0.73rem; color: var(--text-3); margin-top: 0.1rem; }
+    .toggle {
+      position: relative; width: 40px; height: 22px; flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0; border-radius: 9999px;
+      background: var(--border-2); cursor: pointer;
+      transition: background .2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--primary); }
+    .toggle-track::after {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff; top: 3px; left: 3px;
+      transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-track::after { left: 21px; }
+
+    /* ── Profile avatar ── */
+    .profile-avatar {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--primary-bg); border: 2px solid var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; color: var(--primary); margin: 0 auto 1rem;
+    }
+
+    /* ── Notification dropdown ── */
+    .notif-dropdown {
+      position: absolute; top: calc(100% + 8px); right: 0; width: 340px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+      z-index: 200; display: none; flex-direction: column; overflow: hidden;
+      animation: fadeDown .15s ease;
+    }
+    .notif-dropdown.open { display: flex; }
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .notif-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+      font-weight: 600; font-size: 0.85rem;
+    }
+    .notif-header-actions { display: flex; gap: 0.5rem; }
+    .btn-link {
+      background: none; border: none; cursor: pointer; font-size: 0.75rem;
+      color: var(--primary); padding: 0; font-weight: 500; font-family: inherit;
+    }
+    .btn-link:hover { text-decoration: underline; }
+    .btn-link.danger { color: var(--danger); }
+    .notif-list { max-height: 380px; overflow-y: auto; }
+    .notif-empty { padding: 2rem 1rem; text-align: center; color: var(--text-3); font-size: 0.8rem; }
+    .notif-empty i { font-size: 1.5rem; display: block; margin-bottom: 0.5rem; opacity: 0.35; }
+    .notif-item {
+      display: flex; gap: 0.75rem; padding: 0.7rem 1rem;
+      border-bottom: 1px solid var(--border); transition: background .1s;
+    }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-item.unread { background: var(--primary-bg); }
+    .notif-item:hover { background: var(--surface-2); cursor: pointer; }
+    .notif-icon {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; flex-shrink: 0; margin-top: 2px;
+    }
+    .notif-icon.created  { background:#d1fae5;color:#059669; }
+    .notif-icon.updated  { background:#fef3c7;color:#d97706; }
+    .notif-icon.assigned { background:#ede9fe;color:#7c3aed; }
+    .notif-icon.chat     { background:#ffedd5;color:#ea580c; }
+    .notif-icon.webhook  { background:#fce7f3;color:#db2777; }
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-title { font-weight: 600; font-size: 0.8rem; color: var(--text); margin-bottom: 0.1rem; }
+    .notif-text  { font-size: 0.77rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .notif-code  { font-family: 'Fira Mono', monospace; font-weight: 700; color: var(--primary); }
+    .notif-time  { font-size: 0.68rem; color: var(--text-3); margin-top: 0.15rem; }
+
+    /* ── Toast container ── */
+    .toast-container {
+      position: fixed; top: calc(var(--topbar-h) + 0.75rem); right: 1rem;
+      z-index: 400; display: flex; flex-direction: column; gap: 0.5rem;
+      pointer-events: none; width: 320px;
+    }
+    .toast {
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 4px solid var(--primary); border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-md); padding: 0.7rem 0.9rem;
+      display: flex; gap: 0.6rem; align-items: flex-start;
+      pointer-events: all; animation: slideIn .25s ease;
+    }
+    @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+    .toast.out { animation: slideOut .3s ease forwards; }
+    @keyframes slideOut { to{opacity:0;transform:translateX(20px)} }
+    .toast.created  { border-left-color: var(--success); }
+    .toast.updated  { border-left-color: var(--warn); }
+    .toast.assigned { border-left-color: var(--purple); }
+    .toast.chat     { border-left-color: #f97316; }
+    .toast.webhook  { border-left-color: #ec4899; }
+    .toast-icon { font-size: 0.9rem; margin-top: 1px; flex-shrink: 0; }
+    .toast.created  .toast-icon { color: var(--success); }
+    .toast.updated  .toast-icon { color: var(--warn); }
+    .toast.assigned .toast-icon { color: var(--purple); }
+    .toast.chat     .toast-icon { color: #f97316; }
+    .toast.webhook  .toast-icon { color: #ec4899; }
+    .toast-body { flex: 1; min-width: 0; }
+    .toast-title { font-weight: 600; font-size: 0.8rem; color: var(--text); }
+    .toast-text  { font-size: 0.77rem; color: var(--text-2); margin-top: .05rem;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toast-time  { font-size: 0.68rem; color: var(--text-3); margin-top: .15rem; }
+    .toast-close {
+      background: none; border: none; cursor: pointer; color: var(--text-3);
+      font-size: 0.75rem; padding: 0; flex-shrink: 0; font-family: inherit;
+    }
+    .toast-close:hover { color: var(--text); }
+
+    /* ── Drawer (Auth + Webhook) ── */
+    .drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      z-index: 300; display: none; animation: fadeIn .15s ease;
+    }
+    .drawer-overlay.open { display: block; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 360px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg); z-index: 301; display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .25s ease;
+      overflow-y: auto;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+      font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
+      position: sticky; top: 0; background: var(--surface); z-index: 1;
+    }
+    .drawer-close {
+      background: none; border: none; cursor: pointer; color: var(--text-3);
+      font-size: 1rem; padding: 0.25rem;
+    }
+    .drawer-close:hover { color: var(--text); }
+    .drawer-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+
+    /* ── Layout app ── */
+    .app-body {
+      margin-top: var(--topbar-h); min-height: calc(100vh - var(--topbar-h));
+      padding: 1.25rem;
+    }
+
+    /* ── Shared card/panel ── */
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.1rem 1.25rem; box-shadow: var(--shadow);
+    }
+    .panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.85rem;
+    }
+    .panel-title {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-weight: 700; font-size: 0.9rem; color: var(--text);
+    }
+    .panel-title i { color: var(--primary); }
+    .panel-badges { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+    .panel-explain {
+      font-size: 0.78rem; color: var(--text-2);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.6rem 0.85rem;
+      margin-bottom: 0.85rem; line-height: 1.6;
+    }
+
+    /* ── Tech badges ── */
+    .tech-badge {
+      display: inline-flex; align-items: center;
+      padding: 0.1rem 0.45rem; border-radius: 9999px;
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; flex-shrink: 0;
+    }
+    .badge-rest { background:#dbeafe;color:#1d4ed8; }
+    .badge-jwt  { background:#ede9fe;color:#6d28d9; }
+    .badge-sse  { background:#d1fae5;color:#065f46; }
+    .badge-ws   { background:#ffedd5;color:#9a3412; }
+    .badge-hmac { background:#fee2e2;color:#991b1b; }
+
+    /* ── Status badges ── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 0.15rem 0.55rem; border-radius: 9999px;
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    }
+    .badge-open        { background:#dbeafe;color:#1d4ed8; }
+    .badge-in_progress { background:#fef3c7;color:#92400e; }
+    .badge-resolved    { background:#d1fae5;color:#065f46; }
+    .badge-closed      { background:#f1f5f9;color:#64748b; }
+    .badge-triaged     { background:#ede9fe;color:#6d28d9; }
+
+    /* ── Priority dot ── */
+    .prio-dot { width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0; }
+    .prio-low      { background:#94a3b8; }
+    .prio-medium   { background:var(--warn); }
+    .prio-high     { background:#f97316; }
+    .prio-critical { background:var(--danger); }
+
+    /* ── Form elements ── */
+    .field-group  { margin-bottom: 0.55rem; }
+    .field-label  { font-size: 0.72rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.2rem; }
+    input, select, textarea {
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); padding: 0.45rem 0.65rem;
+      font-size: 0.825rem; font-family: inherit; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0.85rem 0; }
+
+    /* ── Buttons ── */
+    button {
+      cursor: pointer; font-family: inherit; font-size: 0.825rem; font-weight: 600;
+      border: none; border-radius: var(--radius-sm); padding: 0.45rem 0.9rem;
+      transition: background .15s; display: inline-flex; align-items: center;
+      gap: 0.35rem; white-space: nowrap;
+    }
+    .btn-primary   { background: var(--primary); color: #fff; }
+    .btn-primary:hover  { background: var(--primary-h); }
+    .btn-secondary { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger    { background: var(--danger); color: #fff; }
+    .btn-danger:hover   { background: var(--danger-h); }
+    .btn-danger:disabled { background: #fca5a5; color: #fff; cursor: not-allowed; opacity: .6; }
+    .btn-success   { background: var(--success); color: #fff; }
+    .btn-success:hover  { background: #059669; }
+    .btn-success:disabled { background: #6ee7b7; color: #fff; cursor: not-allowed; opacity: .6; }
+    .btn-ghost     { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
+    .btn-ghost:hover    { background: var(--surface-2); }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.775rem; }
+    .btn-xs { padding: 0.2rem 0.5rem;  font-size: 0.72rem; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+
+    /* ── Token box ── */
+    .token-box {
+      font-family: 'Fira Mono', monospace; font-size: 0.68rem; color: #059669;
+      word-break: break-all; background: #f0fdf4; border: 1px solid #bbf7d0;
+      padding: 0.5rem 0.65rem; border-radius: var(--radius-sm);
+      max-height: 64px; overflow-y: auto;
+    }
+    .info-box {
+      font-size: 0.78rem; color: var(--text-2); background: var(--surface-2);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.65rem;
+    }
+    .info-box strong { color: var(--text); }
+
+    /* ── Monospace log ── */
+    .log {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.75rem;
+      font-family: 'Fira Mono', monospace; font-size: 0.775rem;
+      max-height: 220px; overflow-y: auto; white-space: pre-wrap;
+      word-break: break-all; color: var(--text-2);
+    }
+    .log .ts          { color: var(--text-3); }
+    .log .ev-created  { color: #059669; font-weight: 600; }
+    .log .ev-updated  { color: #d97706; font-weight: 600; }
+    .log .ev-assigned { color: #7c3aed; font-weight: 600; }
+    .log .ev-error    { color: var(--danger); font-weight: 600; }
+    .log .ev-info     { color: var(--primary); }
+
+    /* ════════════════════════════════════════
+       VIEWS
+    ════════════════════════════════════════ */
+    #view-login  { display: flex; }
+    #view-list   { display: none; }
+    #view-detail { display: none; }
+
+    .list-page-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;
+    }
+
+    .list-page-title {
+      font-size: 1.2rem; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    .list-page-title i { color: var(--primary); }
+
+    .filter-bar {
+      display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;
+    }
+    .filter-bar select { width: auto; font-size: 0.8rem; padding: 0.35rem 0.65rem; }
+
+    /* tickets table */
+    .tickets-table-wrap { overflow-x: auto; }
+    .tickets-table {
+      width: 100%; border-collapse: collapse; font-size: 0.83rem;
+    }
+    .tickets-table th {
+      background: var(--surface-2); text-align: left; padding: 0.6rem 0.85rem;
+      font-size: 0.72rem; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 2px solid var(--border); white-space: nowrap;
+    }
+    .tickets-table td {
+      padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--border);
+      vertical-align: middle; color: var(--text);
+    }
+    .tickets-table tr:last-child td { border-bottom: none; }
+    .tickets-table tbody tr { transition: background .1s; cursor: pointer; }
+    .tickets-table tbody tr:hover { background: var(--primary-bg); }
+
+    .ticket-code {
+      font-family: 'Fira Mono', monospace; font-size: 0.78rem; font-weight: 700;
+      color: var(--primary); letter-spacing: .03em;
+    }
+    .ticket-title-cell { font-weight: 600; max-width: 220px; }
+    .ticket-title-cell span {
+      display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .empty-state {
+      text-align: center; padding: 4rem 2rem; color: var(--text-3);
+    }
+    .empty-state i { font-size: 3rem; display: block; margin-bottom: 1rem; opacity: .25; }
+    .empty-state p { font-size: 0.9rem; margin-bottom: 1.25rem; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      z-index: 500; display: none; align-items: center; justify-content: center;
+      animation: fadeIn .15s ease;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); width: 100%; max-width: 520px;
+      margin: 1rem; display: flex; flex-direction: column;
+      animation: popIn .2s ease;
+    }
+    @keyframes popIn {
+      from { opacity:0; transform: scale(.95); }
+      to   { opacity:1; transform: scale(1); }
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+      font-weight: 700; font-size: 0.95rem;
+    }
+    .modal-body    { padding: 1.25rem; display: flex; flex-direction: column; gap: .55rem; }
+    .modal-footer  { padding: 0.85rem 1.25rem; border-top: 1px solid var(--border);
+                     display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+    /* ════════════════════════════════════════
+       VIEW: DETAIL
+    ════════════════════════════════════════ */
+    .breadcrumb {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.82rem; color: var(--text-3); margin-bottom: 1.25rem;
+    }
+    .breadcrumb a { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 500; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb-sep { color: var(--text-3); }
+    .breadcrumb-current { font-weight: 700; color: var(--text); font-family: 'Fira Mono', monospace; }
+
+    .detail-grid {
+      display: flex; flex-direction: column; gap: 1.25rem;
+    }
+
+    /* ── Ticket detail card ── */
+    .detail-card { display: flex; flex-direction: column; gap: 0; }
+
+    .detail-card-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+
+    .detail-card-title { display: flex; flex-direction: column; gap: 0.35rem; }
+
+    .detail-code {
+      font-family: 'Fira Mono', monospace; font-size: 0.78rem; font-weight: 700;
+      color: var(--primary); display: flex; align-items: center; gap: 0.4rem;
+    }
+    .detail-title-text { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+    .detail-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    /* view/edit mode */
+    .view-only  { display: block; }
+    .edit-only  { display: none; }
+    .editing .view-only { display: none; }
+    .editing .edit-only { display: block; }
+
+    .fields-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem 1rem; margin-bottom: 1rem;
+    }
+    @media (max-width: 760px) { .fields-grid { grid-template-columns: 1fr 1fr; } }
+    .field-item { display: flex; flex-direction: column; gap: 0.15rem; }
+    .field-key  { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+    .field-val  { font-size: 0.85rem; color: var(--text); font-weight: 500; }
+
+    .desc-block { margin-bottom: 1rem; }
+    .desc-block .field-key { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.25rem; }
+    .desc-block .field-val { font-size: 0.85rem; color: var(--text-2); line-height: 1.6; }
+
+    .assign-row { display: flex; gap: 0.4rem; align-items: center; }
+    .assign-row input { flex: 1; margin: 0; font-size: 0.8rem; }
+
+    .status-row { display: flex; gap: 0.4rem; align-items: center; }
+    .status-row select { flex: 1; margin: 0; font-size: 0.8rem; }
+
+    .meta-row {
+      display: flex; gap: 1rem; font-size: 0.72rem; color: var(--text-3);
+      border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap;
+    }
+    .meta-row span strong { color: var(--text-2); }
+
+    /* ── Chat panel ── */
+    .chat-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .ws-control-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.5rem;
+    }
+    .ws-status-info { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-2); }
+    .ws-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--danger);
+    }
+    .ws-dot.on { background: var(--success); animation: pulse 2s infinite; }
+
+    .chat-area {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.75rem;
+      height: 360px;
+      overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .chat-empty { color: var(--text-3); font-size: 0.8rem; text-align: center; margin: auto; }
+
+    .chat-msg { display: flex; flex-direction: column; max-width: 75%; }
+    .chat-msg.mine   { align-self: flex-end; align-items: flex-end; }
+    .chat-msg.other,
+    .chat-msg.rest   { align-self: flex-start; align-items: flex-start; }
+    .chat-msg.system { align-self: center; align-items: center; opacity: .55; max-width: 100%; }
+    .chat-msg.system .chat-bubble { font-size: 0.72rem; background: transparent; border: none;
+      color: var(--text-3); padding: 0.1rem 0; font-style: italic; }
+    .chat-msg.system .chat-bubble-footer { display: none; }
+
+    .chat-bubble { border-radius: 1rem; padding: 0.45rem 0.85rem; font-size: 0.84rem; line-height: 1.5; word-break: break-word; }
+    .chat-msg.mine .chat-bubble { background: var(--primary); color: #fff; border-bottom-right-radius: 0.25rem; }
+    .chat-msg.other .chat-bubble,
+    .chat-msg.rest  .chat-bubble { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 0.25rem; }
+
+    .chat-author { font-size: 0.72rem; font-weight: 700; margin-bottom: 0.18rem; }
+    .chat-bubble-footer { display: flex; justify-content: flex-end; margin-top: 0.3rem; }
+    .chat-time   { font-size: 0.63rem; opacity: .65; }
+    .chat-msg.mine  .chat-time { color: #fff; }
+    .chat-msg.other .chat-time,
+    .chat-msg.rest  .chat-time { color: var(--text-3); }
+    .chat-rest-tag { font-size: 0.62rem; color: #059669; font-weight: 600; }
+
+    .chat-input-row { display: flex; gap: 0.5rem; }
+    .chat-input-row input { flex: 1; margin: 0; }
+
+    .chat-legend {
+      display: flex; gap: 0.75rem; font-size: 0.7rem; color: var(--text-3); flex-wrap: wrap;
+    }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
+
+    /* ── Priority accent ── */
+    .detail-card[data-priority="low"]      { border-left: 3px solid #94a3b8; }
+    .detail-card[data-priority="medium"]   { border-left: 3px solid var(--warn); }
+    .detail-card[data-priority="high"]     { border-left: 3px solid #f97316; }
+    .detail-card[data-priority="critical"] { border-left: 3px solid var(--danger); }
+
+    /* ── Collapsible explain ── */
+    details.explain { margin: 0; }
+    details.explain summary {
+      font-size: 0.75rem; color: var(--text-3); cursor: pointer;
+      list-style: none; display: flex; align-items: center; gap: 0.35rem;
+      user-select: none;
+    }
+    details.explain summary::-webkit-details-marker { display: none; }
+    details.explain summary i { font-size: 0.65rem; transition: transform .2s; }
+    details.explain[open] summary i { transform: rotate(90deg); }
+    details.explain .explain-body {
+      margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-2);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.6rem 0.85rem; line-height: 1.6;
+    }
+
+    /* ── chat two-col input area ── */
+    .chat-footer {
+      display: grid; grid-template-columns: 1fr auto; gap: 0.75rem;
+      align-items: end;
+    }
+    .chat-footer-left { display: flex; flex-direction: column; gap: 0.5rem; }
+    .chat-footer-right { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
+
+    /* ── Webhook drawer specifics ── */
+    .response-box {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.75rem;
+      font-family: 'Fira Mono', monospace; font-size: 0.775rem;
+      color: var(--text-2); min-height: 60px; white-space: pre-wrap; word-break: break-all;
+    }
+
+    /* ── Webhook Subscription UI ── */
+    .wh-section-title {
+      font-size: 0.7rem; font-weight: 700; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: .07em;
+      margin: 1rem 0 .5rem; display: flex; align-items: center; gap: .4rem;
+    }
+    .wh-sub-list { display: flex; flex-direction: column; gap: .5rem; }
+    .wh-sub-item {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .65rem .75rem;
+      display: flex; flex-direction: column; gap: .35rem;
+    }
+    .wh-sub-item.inactive { opacity: .55; }
+    .wh-sub-url {
+      font-size: .78rem; font-weight: 600; color: var(--text);
+      word-break: break-all; display: flex; align-items: center; gap: .4rem;
+    }
+    .wh-sub-desc { font-size: .72rem; color: var(--text-3); }
+    .wh-sub-footer { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+    .wh-sub-actions { margin-left: auto; display: flex; gap: .3rem; align-items: center; }
+    .wh-event-badge {
+      font-size: .65rem; font-weight: 600; border-radius: 9999px;
+      padding: .15rem .5rem; border: 1px solid transparent;
+    }
+    .ev-ticket\.created    { background:#dcfce7;color:#15803d;border-color:#86efac; }
+    .ev-ticket\.updated    { background:#dbeafe;color:#1d4ed8;border-color:#93c5fd; }
+    .ev-message\.created   { background:#fce7f3;color:#be185d;border-color:#f9a8d4; }
+    .wh-empty {
+      text-align:center; color:var(--text-3); font-size:.8rem;
+      padding:1.25rem .5rem; border:1px dashed var(--border); border-radius:var(--radius-sm);
+    }
+    .wh-add-form {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .75rem; margin-top:.5rem;
+      display: flex; flex-direction: column; gap: .55rem;
+    }
+    .wh-events-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: .3rem;
+    }
+    .wh-cb-item {
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .78rem; color: var(--text); cursor: pointer;
+    }
+    .wh-cb-item input[type=checkbox] { accent-color: var(--primary); width:14px;height:14px; }
+
+
+    /* ── Modal: Secret one-time ── */
+    #wh-secret-modal {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.55); padding: 1rem;
+    }
+    #wh-secret-modal.open { display: flex; }
+    .wh-secret-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+      width: 100%; max-width: 480px; padding: 1.5rem;
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+    .wh-secret-banner {
+      background: #fef9c3; border: 1px solid #fde047;
+      border-radius: var(--radius-sm); padding: .65rem .85rem;
+      font-size: .8rem; color: #713f12; display: flex; gap: .5rem; align-items: flex-start;
+    }
+    .wh-secret-value {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .6rem .75rem;
+      font-family: 'Fira Mono', monospace; font-size: .78rem;
+      color: var(--text); word-break: break-all; user-select: all;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .topbar-subtitle { display: none; }
+      .toast-container { right: .5rem; left: .5rem; width: auto; }
+      .notif-dropdown { width: calc(100vw - 2rem); right: -1rem; }
+      .drawer { width: 100%; }
+      .app-body { padding: 0.75rem; }
+    }
+
+    /* ── Login screen ── */
+    #view-login {
+      position: fixed; inset: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      padding: 1.5rem;
+    }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+      width: 100%; max-width: 400px; padding: 2rem 2rem 1.75rem;
+      display: flex; flex-direction: column; gap: 1.25rem;
+    }
+    .login-logo {
+      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+      margin-bottom: 0.25rem;
+    }
+    .login-logo-icon {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--primary-bg); border: 2px solid var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; color: var(--primary);
+    }
+    .login-logo-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .login-logo-sub   { font-size: 0.75rem; color: var(--text-3); text-align: center; }
+    .login-tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+    }
+    .login-tab {
+      flex: 1; padding: 0.5rem; text-align: center;
+      font-size: 0.82rem; font-weight: 600; color: var(--text-3);
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s; margin-bottom: -1px;
+      background: none; border-top: none; border-left: none; border-right: none;
+      border-radius: 0;
+    }
+    .login-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .login-form { display: flex; flex-direction: column; gap: 0.55rem; }
+    .error-msg { font-size: 0.78rem; color: #ef4444; padding: 0.4rem 0.6rem;
+      background: rgba(239,68,68,.08); border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+<!-- ═ Modal: Webhook Secret (exibido UMA VEZ após criação) ═ -->
+<div id="wh-secret-modal">
+  <div class="wh-secret-card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <strong style="font-size:1rem;color:var(--text)">
+        <i class="fa-solid fa-key" style="color:#eab308;margin-right:.4rem"></i>
+        Webhook Secret
+      </strong>
+      <span class="badge" style="background:#dcfce7;color:#15803d;border:1px solid #86efac">Novo</span>
+    </div>
+    <div class="wh-secret-banner">
+      <i class="fa-solid fa-triangle-exclamation" style="margin-top:.1rem;flex-shrink:0"></i>
+      <span>
+        <strong>Salve este secret agora.</strong> Ele não será exibido novamente.<br>
+        Configure-o no seu receptor para verificar a autenticidade dos eventos recebidos
+        via header <code>X-Webhook-Signature: sha256=&lt;hex&gt;</code>.
+      </span>
+    </div>
+    <div>
+      <div class="field-label" style="margin-bottom:.35rem">Secret HMAC-SHA256</div>
+      <div id="wh-secret-display" class="wh-secret-value">—</div>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="btn-secondary btn-sm" onclick="copyWhSecret()">
+        <i class="fa-solid fa-copy"></i> Copiar
+      </button>
+      <button class="btn-primary btn-sm" onclick="closeWhSecretModal()">
+        <i class="fa-solid fa-check"></i> Entendi, já salvei
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ TOP BAR ════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">
+      <i class="fa-solid fa-ticket"></i>
+      TicketFlow API Demo
+      <span class="topbar-subtitle">&nbsp;·&nbsp;REST · JWT · SSE · WebSocket · Webhook</span>
+    </div>
+  </div>
+
+  <div class="topbar-center"></div>
+
+  <div class="topbar-right">
+    <div id="user-chip" class="user-chip" onclick="openDrawer('profile')" title="Perfil" style="cursor:pointer">
+      <i class="fa-solid fa-circle-user"></i>
+      <span id="user-chip-name">—</span>
+      <span id="user-chip-role" class="badge">—</span>
+    </div>
+
+    <button class="icon-btn" id="btn-profile" title="Perfil" onclick="openDrawer('profile')" style="display:none">
+      <i class="fa-solid fa-circle-user"></i>
+    </button>
+    <button class="icon-btn" title="Webhook" onclick="openDrawer('webhook')">
+      <i class="fa-solid fa-link"></i>
+    </button>
+
+    <div class="notif-wrapper" style="position:relative">
+      <button class="icon-btn" id="notif-btn" title="Notificações" onclick="toggleNotif()">
+        <i class="fa-solid fa-bell" id="notif-bell-icon"></i>
+        <span class="notif-count" id="notif-count">0</span>
+      </button>
+      <div class="notif-dropdown" id="notif-dropdown">
+        <div class="notif-header">
+          <span><i class="fa-solid fa-bell" style="color:var(--primary);margin-right:.4rem"></i>Notificações</span>
+          <div class="notif-header-actions">
+            <button class="btn-link" onclick="markAllRead()">Marcar como lidas</button>
+            <button class="btn-link danger" onclick="clearNotifications()">Limpar</button>
+          </div>
+        </div>
+        <div class="notif-list" id="notif-list">
+          <div class="notif-empty"><i class="fa-regular fa-bell-slash"></i>Nenhuma notificação</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ════════════ TOAST CONTAINER ════════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ════════════ DRAWER OVERLAY ════════════ -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+
+<!-- ── Profile Drawer ── -->
+<div class="drawer" id="drawer-profile">
+  <div class="drawer-header">
+    <span><i class="fa-solid fa-circle-user" style="color:var(--primary);margin-right:.4rem"></i>Perfil</span>
+    <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="drawer-body">
+    <div class="profile-avatar"><i class="fa-solid fa-user"></i></div>
+
+    <div style="text-align:center;margin-bottom:1rem">
+      <div style="font-size:1rem;font-weight:700;color:var(--text)" id="profile-username">—</div>
+      <div style="margin-top:.25rem"><span id="profile-role" class="badge badge-open">—</span></div>
+    </div>
+
+    <hr class="divider" />
+
+    <div style="font-size:.72rem;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Preferências</div>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Notificações em tempo real</div>
+        <div class="toggle-sub">Ativa SSE, toasts e badge de alertas</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="pref-notif" checked onchange="onToggleNotif(this.checked)" />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <hr class="divider" />
+
+    <button class="btn-secondary btn-sm" style="width:100%;justify-content:center" onclick="logout()">
+      <i class="fa-solid fa-right-from-bracket"></i> Sair
+    </button>
+  </div>
+</div>
+
+<!-- ── Webhook Drawer ── -->
+<div class="drawer" id="drawer-webhook">
+  <div class="drawer-header">
+    <span><i class="fa-solid fa-link" style="color:var(--primary);margin-right:.4rem"></i>Webhooks de Saída</span>
+    <div style="display:flex;gap:.35rem;align-items:center">
+      <span class="tech-badge badge-hmac">HMAC</span>
+      <span class="tech-badge badge-rest">REST</span>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+  <div class="drawer-body">
+
+    <div class="panel-explain" style="margin:0">
+      Cadastre URLs que receberão <strong>notificações automáticas</strong> quando eventos
+      ocorrerem no sistema — como no GitHub. Cada requisição é assinada com
+      <strong>HMAC-SHA256</strong> no header <code>X-Webhook-Signature</code>.
+    </div>
+
+    <!-- ── Lista de assinaturas ── -->
+    <div class="wh-section-title">
+      <i class="fa-solid fa-list-check"></i> Assinaturas cadastradas
+      <button class="btn-link" style="margin-left:auto;font-size:.7rem" onclick="loadWebhookSubscriptions()">
+        <i class="fa-solid fa-rotate-right"></i> Atualizar
+      </button>
+    </div>
+    <div id="wh-sub-list" class="wh-sub-list">
+      <div class="wh-empty"><i class="fa-regular fa-circle-dot"></i>&nbsp; Carregando...</div>
+    </div>
+
+    <!-- ── Formulário adicionar ── -->
+    <div class="wh-section-title" style="margin-top:1.25rem">
+      <i class="fa-solid fa-plus"></i> Adicionar webhook
+    </div>
+    <div class="wh-add-form">
+      <div class="field-group" style="margin:0">
+        <div class="field-label">URL do endpoint <span style="color:#ef4444">*</span></div>
+        <input id="wh-new-url" placeholder="https://meu-servico.com/webhook" />
+      </div>
+      <div class="field-group" style="margin:0">
+        <div class="field-label">Descrição (opcional)</div>
+        <input id="wh-new-desc" placeholder="Ex: Notificador de e-mail" />
+      </div>
+      <div class="field-label" style="margin-bottom:.2rem">Eventos <span style="color:#ef4444">*</span></div>
+      <div class="wh-events-grid">
+        <label class="wh-cb-item"><input type="checkbox" class="wh-ev-cb" value="ticket.created" checked> ticket.created</label>
+        <label class="wh-cb-item"><input type="checkbox" class="wh-ev-cb" value="ticket.updated"> ticket.updated</label>
+        <label class="wh-cb-item"><input type="checkbox" class="wh-ev-cb" value="message.created"> message.created</label>
+      </div>
+      <button class="btn-primary" onclick="createWebhookSubscription()" style="margin-top:.25rem">
+        <i class="fa-solid fa-plus"></i> Salvar assinatura
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════ APP BODY ════════════ -->
+<div class="app-body">
+
+  <!-- ════ VIEW: LOGIN ════ -->
+  <div id="view-login">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon"><i class="fa-solid fa-ticket"></i></div>
+        <div class="login-logo-title">TicketFlow API Demo</div>
+        <div class="login-logo-sub">REST · JWT · SSE · WebSocket · Webhook</div>
+      </div>
+
+      <div class="login-tabs">
+        <button class="login-tab active" id="tab-login" onclick="switchLoginTab('login')">Entrar</button>
+        <button class="login-tab" id="tab-register" onclick="switchLoginTab('register')">Criar conta</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="login-panel" class="login-form">
+        <div class="field-label">Usuário</div>
+        <input id="login-user" placeholder="Username" value="admin" />
+        <div class="field-label">Senha</div>
+        <input id="login-pass" type="password" placeholder="Senha" value="senha123" />
+        <div id="login-error" class="error-msg" style="display:none"></div>
+        <button class="btn-primary" onclick="login()">
+          <i class="fa-solid fa-right-to-bracket"></i> Entrar
+        </button>
+      </div>
+
+      <!-- Register form -->
+      <div id="register-panel" class="login-form" style="display:none">
+        <div class="field-label">Usuário</div>
+        <input id="reg-user" placeholder="Username" />
+        <div class="field-label">Senha</div>
+        <input id="reg-pass" type="password" placeholder="Senha" />
+        <div class="field-label">Perfil</div>
+        <select id="reg-role">
+          <option value="customer">customer</option>
+          <option value="agent">agent</option>
+          <option value="manager" selected>manager</option>
+        </select>
+        <div id="reg-error" class="error-msg" style="display:none"></div>
+        <button class="btn-primary" onclick="registerUser()">
+          <i class="fa-solid fa-user-plus"></i> Criar conta
+        </button>
+      </div>
+    </div>
+  </div><!-- /view-login -->
+
+  <!-- ════ VIEW: LIST ════ -->
+  <div id="view-list">
+
+    <div class="list-page-header">
+      <div class="list-page-title">
+        <i class="fa-solid fa-ticket"></i>
+        Tickets
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <button class="btn-secondary btn-sm" onclick="loadTickets()">
+          <i class="fa-solid fa-rotate"></i> Atualizar
+        </button>
+        <button class="btn-primary btn-sm" onclick="openCreateModal()">
+          <i class="fa-solid fa-plus"></i> Novo Ticket
+        </button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <select id="filter-status" onchange="renderTicketTable()" style="width:auto">
+        <option value="">Todos os status</option>
+        <option value="open">open</option>
+        <option value="triaged">triaged</option>
+        <option value="in_progress">in_progress</option>
+        <option value="resolved">resolved</option>
+        <option value="closed">closed</option>
+      </select>
+      <select id="filter-priority" onchange="renderTicketTable()" style="width:auto">
+        <option value="">Todas as prioridades</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="critical">critical</option>
+      </select>
+    </div>
+
+    <div class="panel" style="padding:0;overflow:hidden">
+      <div class="tickets-table-wrap">
+        <table class="tickets-table" id="tickets-table">
+          <thead>
+            <tr>
+              <th>CÓDIGO</th>
+              <th>TÍTULO</th>
+              <th>STATUS</th>
+              <th>PRIORIDADE</th>
+              <th>CATEGORIA</th>
+              <th>CRIADO EM</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tickets-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-3)">Clique em <strong>Atualizar</strong> ou <strong>Novo Ticket</strong> para começar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /view-list -->
+
+  <!-- ════ VIEW: DETAIL ════ -->
+  <div id="view-detail">
+
+    <div class="breadcrumb">
+      <a onclick="navigate('list')"><i class="fa-solid fa-arrow-left"></i> Tickets</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current" id="detail-breadcrumb-code">—</span>
+    </div>
+
+    <div class="detail-grid">
+
+      <!-- ── Left: Ticket card ── -->
+      <div class="panel detail-card" id="detail-card">
+
+        <div class="detail-card-header">
+          <div class="detail-card-title">
+            <div class="detail-code" id="detail-code">
+              <i class="fa-solid fa-hashtag" style="font-size:.7rem"></i>
+              <span id="detail-code-text">—</span>
+            </div>
+            <!-- VIEW mode title -->
+            <div class="view-only detail-title-text" id="detail-title-view">—</div>
+            <!-- EDIT mode title -->
+            <div class="edit-only">
+              <input id="edit-title" placeholder="Título" style="font-size:.95rem;font-weight:600" />
+            </div>
+          </div>
+
+          <div class="detail-actions">
+            <button class="btn-ghost btn-sm view-only" id="btn-edit" onclick="startEdit()">
+              <i class="fa-solid fa-pen"></i> Editar
+            </button>
+            <button class="btn-primary btn-sm edit-only" onclick="saveEdit()">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar
+            </button>
+            <button class="btn-secondary btn-sm edit-only" onclick="cancelEdit()">
+              <i class="fa-solid fa-xmark"></i> Cancelar
+            </button>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="desc-block">
+          <div class="field-key">Descrição</div>
+          <div class="view-only field-val" id="detail-desc-view">—</div>
+          <div class="edit-only">
+            <textarea id="edit-desc" placeholder="Descrição"></textarea>
+          </div>
+        </div>
+
+        <!-- Meta fields grid -->
+        <div class="fields-grid">
+          <div class="field-item">
+            <div class="field-key">Status</div>
+            <div class="view-only" id="detail-status-view">—</div>
+            <div class="edit-only">
+              <select id="edit-status">
+                <option value="open">open</option>
+                <option value="triaged">triaged</option>
+                <option value="in_progress">in_progress</option>
+                <option value="resolved">resolved</option>
+                <option value="closed">closed</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-item">
+            <div class="field-key">Prioridade</div>
+            <div class="view-only" id="detail-priority-view">—</div>
+            <div class="edit-only">
+              <select id="edit-priority">
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="critical">critical</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-item">
+            <div class="field-key">Categoria</div>
+            <div class="view-only" id="detail-category-view">—</div>
+            <div class="edit-only">
+              <select id="edit-category">
+                <option value="network">network</option>
+                <option value="hardware">hardware</option>
+                <option value="software">software</option>
+                <option value="access">access</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-item">
+            <div class="field-key">Atribuído a</div>
+            <div class="view-only field-val" id="detail-assigned-view">—</div>
+            <div class="edit-only">
+              <select id="detail-assign-input">
+                <option value="">— não atribuído —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="meta-row" id="detail-meta">
+          <span><strong>ID:</strong> <span id="detail-id-text" style="font-family:'Fira Mono',monospace;font-size:.72rem">—</span></span>
+          <span><strong>Criado em:</strong> <span id="detail-created-at">—</span></span>
+          <span><strong>Atualizado:</strong> <span id="detail-updated-at">—</span></span>
+        </div>
+
+      </div><!-- /detail-card -->
+
+      <!-- ── Chat panel (full-width, abaixo do ticket) ── -->
+      <div class="panel chat-panel">
+
+        <div class="panel-header" style="margin-bottom:0.5rem">
+          <div class="panel-title">
+            <i class="fa-solid fa-comments"></i>
+            Chat do Ticket
+            <span class="tech-badge badge-ws" style="margin-left:.25rem">WebSocket</span>
+          </div>
+          <div class="ws-status-info">
+            <span class="ws-dot" id="ws-dot"></span>
+            <span id="ws-status-text" style="font-size:.78rem">Desconectado</span>
+          </div>
+        </div>
+
+        <details class="explain">
+          <summary><i class="fa-solid fa-chevron-right"></i> Como funciona?</summary>
+          <div class="explain-body">
+            <strong>WebSocket</strong> — bidirecional, full-duplex. Mensagens via
+            <code>POST .../messages</code> (REST) também chegam aqui pelo broadcast do servidor.
+            O token é passado via <em>query param</em> pois o protocolo WS não suporta
+            cabeçalhos de autenticação no handshake.
+          </div>
+        </details>
+
+        <div id="chat-area" class="chat-area">
+          <div class="chat-empty">Aguardando conexão…</div>
+        </div>
+
+        <div class="chat-input-row" style="margin:0">
+          <input id="ws-message" placeholder="Mensagem…" onkeydown="if(event.key==='Enter') sendWSMessage()" style="margin:0" />
+          <button class="btn-primary btn-sm" onclick="sendWSMessage()">
+            <i class="fa-solid fa-paper-plane"></i> Enviar
+          </button>
+        </div>
+
+      </div><!-- /chat-panel -->
+
+    </div><!-- /detail-grid -->
+  </div><!-- /view-detail -->
+
+</div><!-- /app-body -->
+
+<!-- ════════════ MODAL: CRIAR TICKET ════════════ -->
+<div class="modal-overlay" id="modal-create">
+  <div class="modal">
+    <div class="modal-header">
+      <span><i class="fa-solid fa-plus" style="color:var(--primary);margin-right:.4rem"></i>Novo Ticket</span>
+      <div style="display:flex;gap:.35rem;align-items:center">
+        <span class="tech-badge badge-rest">REST</span>
+        <button class="drawer-close" onclick="closeCreateModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <div class="field-label">Título <span style="color:var(--danger)">*</span></div>
+        <input id="modal-title" placeholder="Ex: VPN não conecta" value="VPN não conecta" />
+      </div>
+      <div class="field-group">
+        <div class="field-label">Descrição <span style="color:var(--danger)">*</span></div>
+        <textarea id="modal-desc" placeholder="Descreva o problema…">Após atualização, a VPN não estabelece conexão.</textarea>
+      </div>
+      <div class="row-2">
+        <div class="field-group">
+          <div class="field-label">Prioridade</div>
+          <select id="modal-priority">
+            <option value="low">low</option>
+            <option value="medium" selected>medium</option>
+            <option value="high">high</option>
+            <option value="critical">critical</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Categoria</div>
+          <select id="modal-category">
+            <option value="network" selected>network</option>
+            <option value="hardware">hardware</option>
+            <option value="software">software</option>
+            <option value="access">access</option>
+            <option value="other">other</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary btn-sm" onclick="closeCreateModal()">Cancelar</button>
+      <button class="btn-primary btn-sm" onclick="createTicket()">
+        <i class="fa-solid fa-floppy-disk"></i> Criar Ticket
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   TicketFlow API Demo — SPA Client
+   ================================================================
+   Arquitetura: duas "vistas" (list / detail) controladas via JS
+   sem dependências de framework. Cada vista é um bloco <div>
+   exibido/ocultado por navigate().
+
+   Protocolos demonstrados:
+   - REST      (Fetch API) — CRUD de tickets e mensagens
+   - JWT       (Authorization: Bearer) — auth em cada chamada
+   - SSE       (EventSource) — eventos globais do servidor
+   - WebSocket (por ticket) — chat bidirecional em tempo real
+   - Webhook   (HMAC-SHA256) — integração com sistema externo
+================================================================ */
+
+// ── Estado global ─────────────────────────────────────────────
+let token      = null;   // JWT armazenado em memória
+let loggedUser = null;   // { id, username, role }
+let notifEnabled = true; // notificações + SSE habilitados
+let sseSource  = null;   // EventSource ativa
+let wsConn     = null;   // WebSocket por ticket
+let currentTicketId   = null;  // ID do ticket na tela de detalhe
+let currentTicketData = null;  // objeto TicketResponse em cache
+let agentsMap = {};            // { id: 'username (role)' }
+let allTickets = [];           // cache da lista completa
+
+// ── Notificações ──────────────────────────────────────────────
+let notifications  = [];
+let notifIdCtr     = 0;
+let notifOpen      = false;
+
+// ══════════════════════════════════════════════════════════════
+//  Utilitários gerais
+// ══════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+
+function ts()  { const d = new Date(); return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' }); }
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
+}
+
+function relTime(date) {
+  const d = Math.floor((Date.now() - new Date(date)) / 1000);
+  if (d < 5)    return 'agora';
+  if (d < 60)   return `há ${d}s`;
+  if (d < 3600) return `há ${Math.floor(d/60)}min`;
+  return `há ${Math.floor(d/3600)}h`;
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function authHeaders() {
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
+async function apiFetch(path, opts = {}) {
+  const res  = await fetch(path, { headers: authHeaders(), ...opts });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+  return body;
+}
+
+function appendLog(el, text, cls = 'ev-info') {
+  const d = document.createElement('div');
+  d.innerHTML = `<span class="ts">[${ts()}] </span><span class="${cls}">${escHtml(text)}</span>`;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Navegação SPA (list ↔ detail)
+// ══════════════════════════════════════════════════════════════
+
+function navigate(view, ticketId) {
+  const isLogin = view === 'login';
+  document.querySelector('.topbar').style.display = isLogin ? 'none' : '';
+  $('view-login').style.display  = isLogin          ? 'flex'  : 'none';
+  $('view-list').style.display   = view === 'list'   ? 'block' : 'none';
+  $('view-detail').style.display = view === 'detail' ? 'block' : 'none';
+
+  if (view === 'list') {
+    disconnectWS();
+    currentTicketId   = null;
+    currentTicketData = null;
+    loadTickets();
+  } else if (view === 'detail' && ticketId) {
+    currentTicketId = ticketId;
+    loadAgents().then(() => loadDetail(ticketId).then(() => connectWS()));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Drawers (Auth / Webhook)
+// ══════════════════════════════════════════════════════════════
+
+let activeDrawer = null;
+
+function openDrawer(name) {
+  closeDrawer();
+  activeDrawer = name;
+  $('drawer-overlay').classList.add('open');
+  $(`drawer-${name}`).classList.add('open');
+  if (name === 'webhook') loadWebhookSubscriptions();
+}
+
+function closeDrawer() {
+  if (activeDrawer) {
+    $(`drawer-${activeDrawer}`).classList.remove('open');
+    activeDrawer = null;
+  }
+  $('drawer-overlay').classList.remove('open');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Notificações
+// ══════════════════════════════════════════════════════════════
+
+const NOTIF_META = {
+  created:  { icon:'fa-solid fa-circle-plus',       cls:'created'  },
+  updated:  { icon:'fa-solid fa-pen-to-square',      cls:'updated'  },
+  assigned: { icon:'fa-solid fa-user-check',         cls:'assigned' },
+  chat:     { icon:'fa-solid fa-comment',            cls:'chat'     },
+  webhook:  { icon:'fa-solid fa-link',               cls:'webhook'  },
+};
+
+const TOAST_ICONS = {
+  created:'fa-solid fa-circle-plus', updated:'fa-solid fa-pen-to-square',
+  assigned:'fa-solid fa-user-check', chat:'fa-solid fa-comment',
+  webhook:'fa-solid fa-link',
+};
+
+/** Exibe notificação com code visível (ex: "TKT-0042"). */
+function notify(type, code, title, body) {
+  const id  = ++notifIdCtr;
+  const now = new Date();
+  notifications.unshift({ id, type, code, title, body, createdAt: now, read: false });
+  renderNotifList();
+  updateNotifBadge();
+  if (notifEnabled) showToast(type, code, title, body, now);
+}
+
+function renderNotifList() {
+  const list = $('notif-list');
+  if (!notifications.length) {
+    list.innerHTML = '<div class="notif-empty"><i class="fa-regular fa-bell-slash"></i>Nenhuma notificação</div>';
+    return;
+  }
+  list.innerHTML = notifications.map(n => {
+    const m = NOTIF_META[n.type] || NOTIF_META.updated;
+    const codeHtml = n.code ? `<span class="notif-code">${escHtml(n.code)}</span> · ` : '';
+    return `<div class="notif-item ${n.read?'':'unread'}" onclick="markRead(${n.id})">
+      <div class="notif-icon ${m.cls}"><i class="${m.icon}"></i></div>
+      <div class="notif-body">
+        <div class="notif-title">${codeHtml}${escHtml(n.title)}</div>
+        <div class="notif-text">${escHtml(n.body)}</div>
+        <div class="notif-time">${relTime(n.createdAt)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateNotifBadge() {
+  const u = notifications.filter(n => !n.read).length;
+  const badge = $('notif-count');
+  const btn   = $('notif-btn');
+  if (u > 0) { badge.textContent = u > 99 ? '99+' : u; badge.style.display = 'flex'; btn.classList.add('active'); }
+  else        { badge.style.display = 'none'; btn.classList.remove('active'); }
+}
+
+function toggleNotif() {
+  notifOpen = !notifOpen;
+  $('notif-dropdown').classList.toggle('open', notifOpen);
+  if (notifOpen) renderNotifList();
+}
+
+function markRead(id) {
+  const n = notifications.find(x => x.id === id);
+  if (n) { n.read = true; renderNotifList(); updateNotifBadge(); }
+}
+
+function markAllRead() { notifications.forEach(n => n.read = true); renderNotifList(); updateNotifBadge(); }
+function clearNotifications() { notifications = []; renderNotifList(); updateNotifBadge(); }
+
+document.addEventListener('click', e => {
+  if (notifOpen && !$('notif-btn').contains(e.target) && !$('notif-dropdown').contains(e.target)) {
+    notifOpen = false;
+    $('notif-dropdown').classList.remove('open');
+  }
+});
+
+// ── Toast ──────────────────────────────────────────────────────
+
+function showToast(type, code, title, body, date) {
+  const c     = $('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const codeHtml = code ? `<span style="font-family:'Fira Mono',monospace;font-weight:700;color:var(--primary);font-size:.72rem">${escHtml(code)}</span> ` : '';
+  toast.innerHTML = `
+    <i class="toast-icon ${TOAST_ICONS[type]||'fa-solid fa-bell'}"></i>
+    <div class="toast-body">
+      <div class="toast-title">${codeHtml}${escHtml(title)}</div>
+      <div class="toast-text">${escHtml(body)}</div>
+      <div class="toast-time">${relTime(date)}</div>
+    </div>
+    <button class="toast-close" onclick="dismissToast(this.parentElement)"><i class="fa-solid fa-xmark"></i></button>`;
+  c.appendChild(toast);
+  setTimeout(() => dismissToast(toast), 4500);
+}
+
+function dismissToast(t) {
+  if (!t?.parentElement) return;
+  t.classList.add('out');
+  setTimeout(() => t.remove(), 300);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Auth
+// ══════════════════════════════════════════════════════════════
+
+async function registerUser() {
+  const errEl = $('reg-error');
+  errEl.style.display = 'none';
+  try {
+    const d = await apiFetch('/auth/register', { method:'POST', body: JSON.stringify({
+      username: $('reg-user').value, password: $('reg-pass').value, role: $('reg-role').value
+    })});
+    // Sucesso: copia credenciais para o form de login e muda de aba
+    $('login-user').value = $('reg-user').value;
+    $('login-pass').value = $('reg-pass').value;
+    switchLoginTab('login');
+  } catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+
+function switchLoginTab(tab) {
+  const isLogin = tab === 'login';
+  $('tab-login').classList.toggle('active', isLogin);
+  $('tab-register').classList.toggle('active', !isLogin);
+  $('login-panel').style.display    = isLogin ? 'flex' : 'none';
+  $('register-panel').style.display = isLogin ? 'none' : 'flex';
+}
+
+async function login() {
+  const errEl = $('login-error');
+  errEl.style.display = 'none';
+  try {
+    const d = await apiFetch('/auth/login', { method:'POST', body: JSON.stringify({
+      username: $('login-user').value, password: $('login-pass').value
+    })});
+    token = d.access_token;
+    await getMe(true);
+    loadAgents();          // popula agentsMap globalmente para notificações SSE
+    if (notifEnabled) startSSE();
+    navigate('list');
+  } catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+
+async function getMe(silent = false) {
+  try {
+    const d = await apiFetch('/auth/me');
+    loggedUser = d;
+    const chip = $('user-chip');
+    chip.style.display = 'flex';
+    $('user-chip-name').textContent = d.username;
+    $('btn-profile').style.display  = 'flex';
+    const roleEl = $('user-chip-role');
+    roleEl.textContent = d.role;
+    roleEl.className   = 'badge ' + (d.role==='manager' ? 'badge-triaged' : d.role==='agent' ? 'badge-in_progress' : 'badge-open');
+    // Atualiza drawer de perfil
+    $('profile-username').textContent = d.username;
+    const pr = $('profile-role');
+    pr.textContent = d.role;
+    pr.className   = 'badge ' + (d.role==='manager' ? 'badge-triaged' : d.role==='agent' ? 'badge-in_progress' : 'badge-open');
+    if (!silent) {
+      const mi = $('me-info'); mi.style.display = 'block';
+      mi.innerHTML = `<strong>Usuário:</strong> ${escHtml(d.username)} &nbsp;|&nbsp; <strong>Papel:</strong> ${escHtml(d.role)}`;
+    }
+  } catch (e) { if (!silent) alert('Erro: ' + e.message); }
+}
+
+// ── Perfil ─────────────────────────────────────────────────────────
+
+function onToggleNotif(enabled) {
+  notifEnabled = enabled;
+  const bellBtn = $('notif-btn');
+  if (!enabled) {
+    bellBtn.classList.add('bell-muted');
+    stopSSE();
+  } else {
+    bellBtn.classList.remove('bell-muted');
+    if (token) startSSE();
+  }
+}
+
+function logout() {
+  token      = null;
+  loggedUser = null;
+  agentsMap  = {};
+  notifEnabled = true;
+  $('pref-notif').checked = true;
+  stopSSE();
+  disconnectWS();
+  $('user-chip').style.display    = 'none';
+  $('btn-profile').style.display  = 'none';
+  closeDrawer();
+  allTickets = [];
+  notifications = [];
+  renderNotifList();
+  updateNotifBadge();
+  navigate('login');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SSE — Global (top bar)
+// ══════════════════════════════════════════════════════════════
+
+function setSseStatus(on) {
+  // Sino reflete estado SSE
+  const bellBtn  = $('notif-btn');
+  const bellIcon = $('notif-bell-icon');
+  if (on) {
+    bellBtn.classList.remove('bell-off');
+    bellIcon.className = 'fa-solid fa-bell';
+    bellBtn.title = 'Notificações';
+  } else {
+    bellBtn.classList.add('bell-off');
+    bellIcon.className = 'fa-solid fa-bell-slash';
+    bellBtn.title = 'SSE desconectado — notificações em tempo real inativas';
+  }
+}
+
+function toggleSSE() {
+  if (sseSource) { stopSSE(); } else { startSSE(); }
+}
+
+function startSSE() {
+  if (!token) { navigate('login'); return; }
+  if (sseSource) sseSource.close();
+
+  // O token é passado via query param pois EventSource não suporta
+  // cabeçalhos HTTP personalizados no navegador.
+  sseSource = new EventSource(`/stream/tickets?token=${encodeURIComponent(token)}`);
+
+  sseSource.addEventListener('ticket.created', e => {
+    const t = safeParseJSON(e.data);
+    const code = t?.code || '';
+    notify('created', code, 'Ticket criado', `"${t?.title||''}" — ${t?.priority||''} / ${t?.category||''}`);
+    // Atualiza a lista se ela estiver visível
+    if ($('view-list').style.display !== 'none') loadTickets();
+  });
+
+  sseSource.addEventListener('ticket.updated', e => {
+    const t = safeParseJSON(e.data);
+    const code = t?.code || '';
+    notify('updated', code, 'Ticket atualizado', `status → ${t?.status||''}${t?.assigned_to?' · atribuído a '+t.assigned_to.username:''}`);
+    // Atualiza detalhe se o ticket ativo mudou
+    if (currentTicketId && t?.id === currentTicketId) loadDetail(currentTicketId, true);
+    if ($('view-list').style.display !== 'none') loadTickets();
+  });
+
+  sseSource.addEventListener('ticket.assigned', e => {
+    const t = safeParseJSON(e.data);
+    const code = t?.code || '';
+    const agentLabel = t?.assigned_to?.username || '—';
+    notify('assigned', code, 'Ticket atribuído', `→ ${agentLabel}`);
+    if (currentTicketId && t?.id === currentTicketId) loadDetail(currentTicketId, true);
+    if ($('view-list').style.display !== 'none') loadTickets();
+  });
+
+  sseSource.onerror = () => setSseStatus(false);
+  setSseStatus(true);
+}
+
+function stopSSE() {
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  setSseStatus(false);
+}
+
+function safeParseJSON(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Tickets LIST
+// ══════════════════════════════════════════════════════════════
+
+async function loadTickets() {
+  try {
+    allTickets = await apiFetch('/tickets');
+    renderTicketTable();
+  } catch (e) { alert('Erro ao listar tickets: ' + e.message); }
+}
+
+function renderTicketTable() {
+  const statusF   = $('filter-status').value;
+  const priorityF = $('filter-priority').value;
+  const tbody     = $('tickets-tbody');
+
+  let data = allTickets;
+  if (statusF)   data = data.filter(t => t.status   === statusF);
+  if (priorityF) data = data.filter(t => t.priority === priorityF);
+
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="7">
+      <div class="empty-state">
+        <i class="fa-solid fa-ticket-simple"></i>
+        <p>${allTickets.length ? 'Nenhum ticket com esses filtros.' : 'Nenhum ticket cadastrado.'}</p>
+        <button class="btn-primary btn-sm" onclick="openCreateModal()">
+          <i class="fa-solid fa-plus"></i> Criar Ticket
+        </button>
+      </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(t => {
+    const prioDot = `<span class="prio-dot prio-${t.priority}" title="${t.priority}"></span>`;
+    return `<tr onclick="navigate('detail','${t.id}')">
+      <td><span class="ticket-code">${escHtml(t.code||'—')}</span></td>
+      <td class="ticket-title-cell"><span title="${escHtml(t.title)}">${escHtml(t.title)}</span></td>
+      <td><span class="badge badge-${t.status}">${t.status}</span></td>
+      <td style="display:flex;align-items:center;gap:.4rem">${prioDot}${t.priority}</td>
+      <td>${t.category}</td>
+      <td style="white-space:nowrap;font-size:.78rem;color:var(--text-3)">${fmtDate(t.created_at)}</td>
+      <td>
+        <button class="btn-ghost btn-xs" onclick="event.stopPropagation();navigate('detail','${t.id}')">
+          <i class="fa-solid fa-arrow-right"></i> Detalhes
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Modal Criar Ticket ─────────────────────────────────────────
+
+function openCreateModal() {
+  $('modal-create').classList.add('open');
+}
+
+function closeCreateModal() {
+  $('modal-create').classList.remove('open');
+}
+
+// Fecha ao clicar no overlay do modal
+$('modal-create').addEventListener('click', e => { if (e.target === $('modal-create')) closeCreateModal(); });
+
+async function createTicket() {
+  try {
+    const d = await apiFetch('/tickets', { method:'POST', body: JSON.stringify({
+      title:       $('modal-title').value,
+      description: $('modal-desc').value,
+      priority:    $('modal-priority').value,
+      category:    $('modal-category').value,
+    })});
+    closeCreateModal();
+    notify('created', d.code, 'Ticket criado', `"${d.title}" — ${d.priority} / ${d.category}`);
+    await loadTickets();
+  } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Ticket DETAIL
+// ══════════════════════════════════════════════════════════════
+
+async function loadDetail(id, silent = false) {
+  try {
+    const t = await apiFetch(`/tickets/${id}`);
+    currentTicketData = t;
+    renderDetail(t);
+    if (!silent) {
+      clearChat();
+      await loadMessages();
+    }
+  } catch (e) { if (!silent) alert('Erro: ' + e.message); }
+}
+
+function renderDetail(t) {
+  // Breadcrumb e código
+  $('detail-breadcrumb-code').textContent = t.code || t.id.slice(0,8);
+  $('detail-code-text').textContent       = t.code || '—';
+
+  // Título (view mode)
+  $('detail-title-view').textContent = t.title;
+  $('edit-title').value              = t.title;
+
+  // Descrição
+  $('detail-desc-view').textContent = t.description;
+  $('edit-desc').value              = t.description;
+
+  // Status
+  $('detail-status-view').innerHTML = `<span class="badge badge-${t.status}">${t.status}</span>`;
+  $('edit-status').value            = t.status;
+
+  // Priority
+  const prioDot = `<span class="prio-dot prio-${t.priority}" style="margin-right:.3rem"></span>`;
+  $('detail-priority-view').innerHTML = prioDot + t.priority;
+  $('edit-priority').value            = t.priority;
+
+  // Category
+  $('detail-category-view').textContent = t.category;
+  $('edit-category').value              = t.category;
+
+  $('detail-assigned-view').textContent = t.assigned_to?.username || '— não atribuído';
+  // popula o select de agentes com o valor atual (opções carregadas por loadAgents)
+  $('detail-assign-input').value = t.assigned_to?.id || '';
+
+  // Meta
+  $('detail-id-text').textContent     = t.id;
+  $('detail-created-at').textContent  = fmtDate(t.created_at);
+  $('detail-updated-at').textContent  = fmtDate(t.updated_at);
+
+  // Acento de prioridade na borda esquerda do card
+  $('detail-card').dataset.priority = t.priority;
+
+  // Sai do modo edição se estava
+  cancelEdit();
+}
+
+// ── Edição inline ──────────────────────────────────────────────
+
+function startEdit() {
+  $('detail-card').classList.add('editing');
+}
+
+function cancelEdit() {
+  $('detail-card').classList.remove('editing');
+  if (currentTicketData) {
+    $('edit-title').value            = currentTicketData.title;
+    $('edit-desc').value             = currentTicketData.description;
+    $('edit-status').value           = currentTicketData.status;
+    $('edit-priority').value         = currentTicketData.priority;
+    $('edit-category').value         = currentTicketData.category;
+    $('detail-assign-input').value   = currentTicketData.assigned_to?.id || '';
+  }
+}
+
+async function saveEdit() {
+  if (!currentTicketId) return;
+  const cur = currentTicketData || {};
+  const changes = {};
+  const newTitle   = $('edit-title').value.trim();
+  const newDesc    = $('edit-desc').value.trim();
+  const newPrio    = $('edit-priority').value;
+  const newCat     = $('edit-category').value;
+  const newStatus  = $('edit-status').value;
+  const newAgent   = $('detail-assign-input').value;
+  if (newTitle  !== cur.title)                     changes.title          = newTitle;
+  if (newDesc   !== cur.description)               changes.description    = newDesc;
+  if (newPrio   !== cur.priority)                  changes.priority       = newPrio;
+  if (newCat    !== cur.category)                  changes.category       = newCat;
+  if (newStatus !== cur.status)                    changes.status         = newStatus;
+  if (newAgent  !== (cur.assigned_to?.id || ''))   changes.assigned_to_id = newAgent;
+  if (!Object.keys(changes).length) {
+    $('detail-card').classList.remove('editing');
+    return;
+  }
+  try {
+    await apiFetch(`/tickets/${currentTicketId}`, {
+      method:'PATCH', body: JSON.stringify(changes)
+    });
+    await loadDetail(currentTicketId, true);
+    $('detail-card').classList.remove('editing');
+  } catch (e) { alert('Erro ao salvar: ' + e.message); }
+}
+
+// ── Assign ────────────────────────────────────────────────────
+
+async function loadAgents() {
+  try {
+    const [agents, managers] = await Promise.all([
+      apiFetch('/auth/users?role=agent'),
+      apiFetch('/auth/users?role=manager'),
+    ]);
+    const all = [...agents, ...managers];
+    agentsMap = Object.fromEntries(all.map(u => [u.id, `${u.username} (${u.role})`]));
+    const sel = $('detail-assign-input');
+    sel.innerHTML = '<option value="">— selecione um agente —</option>' +
+      all.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.username)} (${escHtml(u.role)})</option>`).join('');
+  } catch (_) { /* silencioso */ }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WebSocket Chat (por ticket)
+// ══════════════════════════════════════════════════════════════
+
+function setWsStatus(on) {
+  $('ws-dot').className = 'ws-dot' + (on ? ' on' : '');
+  $('ws-status-text').textContent = on ? 'Conectado' : 'Desconectado';
+}
+
+function connectWS() {
+  if (!token) return;
+  const id = currentTicketId;
+  if (!id) return;
+  if (wsConn) { wsConn.close(); }
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsConn = new WebSocket(`${proto}://${location.host}/ws/tickets/${id}?token=${encodeURIComponent(token)}`);
+
+  wsConn.onopen = () => {
+    setWsStatus(true);
+  };
+  wsConn.onclose  = () => { setWsStatus(false); };
+  wsConn.onerror  = () => addBubble({ type:'system', author:null, message:'Erro na conexão WebSocket.' });
+  wsConn.onmessage = e => {
+    const p = safeParseJSON(e.data);
+    if (p?.type === 'user_joined') {
+      addBubble({ type:'system', author:null, message:`${p.author} entrou no chat` });
+    } else if (p?.type === 'user_left') {
+      addBubble({ type:'system', author:null, message:`${p.author} saiu do chat` });
+    } else if (p?.type === 'message') {
+      const isMine = loggedUser && (p.author === loggedUser.username);
+      addBubble({ type: isMine ? 'mine' : 'other', author: isMine ? null : p.author, message: p.message });
+      if (!isMine) notify('chat', currentTicketData?.code||'', `Chat · ${currentTicketData?.code||''}`, `${p.author}: "${p.message}"`);
+    } else {
+      addBubble({ type:'other', author:null, message: e.data });
+    }
+  };
+}
+
+function disconnectWS() {
+  if (wsConn) { wsConn.close(); wsConn = null; }
+  setWsStatus(false);
+}
+
+async function sendWSMessage() {
+  if (!wsConn || wsConn.readyState !== WebSocket.OPEN) {
+    addBubble({ type:'system', author:null, message:'Conecte o WebSocket para enviar mensagens.' });
+    return;
+  }
+  const msg = $('ws-message').value.trim();
+  if (!msg) return;
+  $('ws-message').value = '';
+  // Envia via WebSocket; o servidor persiste e faz broadcast de volta (type:'message')
+  wsConn.send(msg);
+}
+
+function usernameColor(name) {
+  // Gera uma cor consistente por username (paleta amigável)
+  const palette = ['#e53935','#d81b60','#8e24aa','#5e35b1','#1e88e5','#039be5','#00897b','#43a047','#fb8c00','#6d4c41'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+}
+
+function clearChat() { $('chat-area').innerHTML = ''; }
+
+function addBubble({ type, author, message }) {
+  const area = $('chat-area');
+  const empty = area.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
+  const w = document.createElement('div');
+  w.className = `chat-msg ${type}`;
+
+  const authorHtml = (author && type !== 'mine')
+    ? `<div class="chat-author" style="color:${usernameColor(author)}">${escHtml(author)}</div>`
+    : '';
+
+  w.innerHTML = `
+    <div class="chat-bubble">
+      ${authorHtml}
+      <div class="chat-bubble-body">${escHtml(message)}</div>
+      <div class="chat-bubble-footer"><span class="chat-time">${ts()}</span></div>
+    </div>`;
+
+  area.appendChild(w);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ── Histórico REST de mensagens ────────────────────────────────
+
+async function loadMessages() {
+  if (!currentTicketId) return;
+  try {
+    const msgs = await apiFetch(`/tickets/${currentTicketId}/messages`);
+    clearChat();
+    if (!msgs.length) {
+      $('chat-area').innerHTML = '<div class="chat-empty">— Nenhuma mensagem salva —</div>';
+      return;
+    }
+    msgs.forEach(m => {
+      const isMine = loggedUser && m.author_id === loggedUser.id;
+      addBubble({
+        type:   isMine ? 'mine' : 'other',
+        author: isMine ? null : (m.author_username || m.author_id.slice(-6)),
+        message: m.message,
+      });
+    });
+  } catch (e) { /* silencioso */ }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Webhook Subscriptions (saída)
+// ══════════════════════════════════════════════════════════════
+
+const EVENT_COLORS = {
+  'ticket.created':      'ev-ticket.created',
+  'ticket.updated':      'ev-ticket.updated',
+  'message.created':     'ev-message.created',
+};
+
+function whEventBadge(ev) {
+  const cls = EVENT_COLORS[ev] || '';
+  return `<span class="wh-event-badge ${cls}">${ev}</span>`;
+}
+
+async function loadWebhookSubscriptions() {
+  const list = $('wh-sub-list');
+  if (!list) return;
+  try {
+    const res = await fetch('/webhook-subscriptions');
+    const subs = await res.json();
+    if (!Array.isArray(subs) || subs.length === 0) {
+      list.innerHTML = '<div class="wh-empty"><i class="fa-regular fa-circle-dot"></i>&nbsp; Nenhuma assinatura cadastrada.</div>';
+      return;
+    }
+    list.innerHTML = subs.map(s => `
+      <div class="wh-sub-item ${s.is_active ? '' : 'inactive'}" id="wh-item-${s.id}">
+        <div class="wh-sub-url">
+          <i class="fa-solid fa-circle${s.is_active ? '' : '-xmark'}" style="color:${s.is_active ? '#22c55e' : '#ef4444'};font-size:.65rem"></i>
+          ${escHtml(s.url)}
+        </div>
+        ${s.description ? `<div class="wh-sub-desc">${escHtml(s.description)}</div>` : ''}
+        <div class="wh-sub-footer">
+          ${s.events.map(ev => whEventBadge(ev)).join(' ')}
+          <div class="wh-sub-actions">
+            <button class="btn-secondary btn-sm" style="padding:.2rem .5rem;font-size:.7rem" title="${s.is_active ? 'Desativar' : 'Ativar'}" onclick="toggleWebhookSubscription('${s.id}', ${s.is_active})">
+              <i class="fa-solid fa-${s.is_active ? 'pause' : 'play'}"></i>
+            </button>
+            <button class="btn-secondary btn-sm" style="padding:.2rem .5rem;font-size:.7rem;color:#ef4444" title="Remover" onclick="deleteWebhookSubscription('${s.id}')">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="wh-empty" style="color:#ef4444"><i class="fa-solid fa-triangle-exclamation"></i>&nbsp; Erro ao carregar: ${e.message}</div>`;
+  }
+}
+
+async function createWebhookSubscription() {
+  const url = $('wh-new-url').value.trim();
+  if (!url) { alert('Informe a URL do endpoint.'); return; }
+  const events = [...document.querySelectorAll('.wh-ev-cb:checked')].map(cb => cb.value);
+  if (!events.length) { alert('Selecione pelo menos um evento.'); return; }
+  const description = $('wh-new-desc').value.trim();
+  try {
+    const res = await fetch('/webhook-subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, events, description }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Erro: ' + (err.detail || res.status));
+      return;
+    }
+    const data = await res.json();
+    $('wh-new-url').value = '';
+    $('wh-new-desc').value = '';
+    document.querySelectorAll('.wh-ev-cb').forEach(cb => { cb.checked = cb.value === 'ticket.created'; });
+    // Exibe o secret gerado uma única vez
+    $('wh-secret-display').textContent = data.secret;
+    $('wh-secret-modal').classList.add('open');
+    notify('webhook', '', 'Webhook cadastrado', url);
+    await loadWebhookSubscriptions();
+  } catch (e) { alert('Erro: ' + e.message); }
+}
+
+function closeWhSecretModal() {
+  $('wh-secret-modal').classList.remove('open');
+  $('wh-secret-display').textContent = '—';
+}
+
+async function copyWhSecret() {
+  const val = $('wh-secret-display').textContent;
+  try {
+    await navigator.clipboard.writeText(val);
+    notify('webhook', '', 'Secret copiado!', '');
+  } catch { alert(val); }
+}
+
+async function deleteWebhookSubscription(id) {
+  if (!confirm('Remover esta assinatura?')) return;
+  try {
+    await fetch(`/webhook-subscriptions/${id}`, { method: 'DELETE' });
+    notify('webhook', '', 'Webhook removido', '');
+    await loadWebhookSubscriptions();
+  } catch (e) { alert('Erro: ' + e.message); }
+}
+
+async function toggleWebhookSubscription(id) {
+  try {
+    const res = await fetch(`/webhook-subscriptions/${id}/toggle`, { method: 'PATCH' });
+    const data = await res.json();
+    notify('webhook', '', `Webhook ${data.is_active ? 'ativado' : 'desativado'}`, '');
+    await loadWebhookSubscriptions();
+  } catch (e) { alert('Erro: ' + e.message); }
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Init
+// ══════════════════════════════════════════════════════════════
+
+navigate('login');
+</script>
+</body>
+</html>
