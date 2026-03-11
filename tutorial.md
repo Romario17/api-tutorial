@@ -670,7 +670,6 @@ app.add_middleware(
 | REST API Design              | https://restfulapi.net/                                   |
 | Fielding Dissertation (REST) | https://ics.uci.edu/~fielding/pubs/dissertation/top.htm   |
 | Beanie ODM                   | https://beanie-odm.dev/                                   |
-| Tutorials Marcelo Akira      | https://github.com/marceloakira/tutorials                 |
 
 ---
 
