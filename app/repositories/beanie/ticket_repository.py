@@ -23,7 +23,7 @@ class BeanieTicketRepository:
         return await Ticket.get(PydanticObjectId(ticket_id), fetch_links=fetch_links)
 
     async def list_all(self, *, fetch_links: bool = False) -> list[Ticket]:
-        return await Ticket.find_all(fetch_links=fetch_links).to_list()
+        return await Ticket.find(fetch_links=fetch_links).to_list()
 
     async def save(self, ticket: Ticket) -> Ticket:
         await ticket.save()
