@@ -272,7 +272,6 @@ sequenceDiagram
 | FastAPI | 0.135.1 | Framework web assíncrono |
 | Pydantic v2 | 2.11.1 | Validação e serialização de dados |
 | Beanie | 2.0.1 | ODM assíncrono para MongoDB |
-| pymongo | (transitive) | Driver assíncrono MongoDB |
 | python-jose | 3.4.0 | Geração e validação de JWT |
 | pwdlib / argon2 | 0.3.0 | Hash de senhas |
 | Uvicorn | 0.34.0 | Servidor ASGI |
