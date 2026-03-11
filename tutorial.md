@@ -570,35 +570,6 @@ def cadastrar(bg: BackgroundTasks, email: str):
 
 - [Background Tasks](https://fastapi.tiangolo.com/tutorial/background-tasks/)
 - [WebSockets](https://fastapi.tiangolo.com/advanced/websockets/)
-
----
-
-### 📊 5.7 Middleware e CORS
-
-```python
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://meusite.com"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-📚 Referências:
-
-- [CORS FastAPI](https://fastapi.tiangolo.com/tutorial/cors/)
-- [Middleware](https://fastapi.tiangolo.com/advanced/middleware/)
-
----
-
-### 🏗️ 5.9 Arquiteturas para Projetos Maiores
-
-- **Bigger Applications** (routers, dependências por módulo): [docs](https://fastapi.tiangolo.com/tutorial/bigger-applications/)
-- **Clean Architecture / Hexagonal**: separação de domínio, aplicação, infraestrutura
-- **Repository Pattern** com FastAPI + Beanie
-
 ---
 
 ## 📚 Leitura Adicional
