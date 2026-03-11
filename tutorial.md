@@ -197,10 +197,10 @@ print(criar_produto_sem_validacao({"nome": 42, "preco": -100}))
 from pydantic import BaseModel, Field, field_validator
 
 class Produto(BaseModel):
-    id: int         = len(produtos_db) + 1
-    nome:     str   = Field(..., min_length=2, max_length=100)
-    preco:    float = Field(..., gt=0, description="Deve ser maior que zero")
-    tipo: str       = Filed(..., )
+    id:     int     = len(produtos_db) + 1
+    nome:   str     = Field(..., min_length=2, max_length=100)
+    preco:  float   = Field(..., gt=0, description="Deve ser maior que zero")
+    tipo:   str
 
 # ✅ Dados válidos
 p = Produto(nome="Notebook", preco=3500.0)
@@ -403,8 +403,7 @@ print("Restantes:", client4.get("/items").json())
 
 **b)** `204 No Content` indica sucesso sem corpo de resposta. É a convenção REST para operações de deleção.
 
-</details>
----
+## </details>
 
 ## Parte 5 — Tópicos Avançados
 
@@ -571,6 +570,7 @@ def cadastrar(bg: BackgroundTasks, email: str):
 
 - [Background Tasks](https://fastapi.tiangolo.com/tutorial/background-tasks/)
 - [WebSockets](https://fastapi.tiangolo.com/advanced/websockets/)
+
 ---
 
 ## 📚 Leitura Adicional
@@ -585,6 +585,7 @@ def cadastrar(bg: BackgroundTasks, email: str):
 - [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
 - [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
 - [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
+
 ---
 
 ## 🎯 Desafio Final
