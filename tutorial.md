@@ -894,6 +894,84 @@ sequenceDiagram
 
 O `SSEManager` (`app/core/sse.py`) utiliza uma **fila `asyncio.Queue` por cliente** para desacoplar os produtores de eventos (serviços de domínio) dos consumidores (streams SSE). Quando um ticket é criado ou alterado, o `TicketService` chama `sse_manager.broadcast(event_type, data)`, que coloca a mensagem formatada em todas as filas ativas. Cada cliente conectado consome sua fila via um **gerador assíncrono** que também emite um comentário keep-alive a cada 15 segundos para evitar que proxies intermediários encerrem a conexão por inatividade.
 
+**`app/core/sse.py` — gerenciador de eventos SSE:**
+
+```python
+import asyncio
+import json
+from collections.abc import AsyncGenerator
+
+
+class SSEManager:
+    """Gerencia filas de eventos SSE para múltiplos clientes conectados."""
+
+    def __init__(self) -> None:
+        self._queues: list[asyncio.Queue[str]] = []
+
+    async def broadcast(self, event_type: str, data: dict) -> None:
+        """Envia um evento SSE formatado para todas as filas ativas."""
+        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+        for q in list(self._queues):
+            await q.put(message)
+
+    async def subscribe(self) -> AsyncGenerator[str, None]:
+        """
+        Gerador assíncrono que produz mensagens SSE para um cliente.
+
+        Envia um comentário keep-alive a cada 15 segundos de inatividade
+        para evitar timeout de proxies intermediários.
+        """
+        q: asyncio.Queue[str] = asyncio.Queue()
+        self._queues.append(q)
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield message
+                except TimeoutError:
+                    yield ": keep-alive\n\n"
+        finally:
+            self._queues.remove(q)
+
+
+sse_manager = SSEManager()
+```
+
+**`app/routers/stream.py` — endpoint SSE:**
+
+```python
+from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
+
+from app.core.sse import sse_manager
+
+router = APIRouter(prefix="/stream", tags=["Stream SSE"])
+
+
+@router.get("/tickets")
+async def stream_tickets(token: str = Query(...)) -> StreamingResponse:
+    # token JWT validado antes de abrir o stream
+    return StreamingResponse(
+        sse_manager.subscribe(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+```
+
+**Emitindo eventos a partir do serviço de domínio:**
+
+```python
+# Em qualquer serviço (ex.: ticket_service.py)
+async def create_ticket(self, ...) -> TicketResponse:
+    ticket = await self._ticket_repo.create(...)
+    response = TicketResponse(...)
+    # Notifica todos os clientes SSE conectados
+    await sse_manager.broadcast("ticket.created", response.model_dump(mode="json"))
+    return response
+```
+
+A separação entre `SSEManager` (fila) e o endpoint (gerador) garante que múltiplos clientes possam se conectar simultaneamente, cada um com sua própria fila independente, sem bloquear uns aos outros.
+
 ### Diferença entre SSE e WebSocket
 
 | Aspecto | SSE | WebSocket |
