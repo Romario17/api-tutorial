@@ -27,7 +27,7 @@ O **TicketFlow API Demo** é um projeto pedagógico que demonstra, em um único 
 ```bash
 git clone https://github.com/Romario17/TicketFlow-API-Demo.git
 cd TicketFlow-API-Demo
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
