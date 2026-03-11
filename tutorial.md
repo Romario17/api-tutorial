@@ -1,24 +1,24 @@
 # 🚀 Oficina: APIs com FastAPI
 
-> **Duração**: ~80 minutos | **Nível**: Básico → Intermediário
+> **Nível**: Básico → Intermediário
 >
 > **Repositório**: https://github.com/Romario17/api-tutorial
 
 ---
 
-## 📋 Roteiro
+## 📋 Sumário
 
-| #   | Tópico                           | Tempo   |
-| --- | -------------------------------- | ------- |
-| 1   | O que é uma API? REST e HTTP     | ~10 min |
-| 2   | FastAPI — Primeiros passos       | ~10 min |
-| 3   | Modelos e validação com Pydantic | ~10 min |
-| 4   | Documentação automática          | ~5 min  |
-| 5   | Injeção de dependência           | ~5 min  |
-| 6   | CRUD completo com banco de dados | ~10 min |
-| 7   | WebSockets                       | ~10 min |
-| 8   | Server-Sent Events (SSE)         | ~10 min |
-| 9   | Webhooks                         | ~10 min |
+| #   | Tópico                           |
+| --- | -------------------------------- |
+| 1   | O que é uma API? REST e HTTP     |
+| 2   | FastAPI — Primeiros passos       |
+| 3   | Modelos e validação com Pydantic |
+| 4   | Documentação automática          |
+| 5   | Injeção de dependência           |
+| 6   | CRUD completo com banco de dados |
+| 7   | WebSockets                       |
+| 8   | Server-Sent Events (SSE)         |
+| 9   | Webhooks                         |
 
 ---
 
