@@ -146,7 +146,7 @@ def buscar_produto(produto_id: int):
     for p in produtos_db:
         if p["id"] == produto_id:
             return p
-    return {"erro": "Produto não encontrado"}, 404
+    raise HTTPException(status_code=404, detail="Produto não encontrado")
 
 
 # Testando diretamente com TestClient (sem iniciar servidor)
@@ -161,11 +161,11 @@ print("Produto 2:", client.get("/produtos/2").json())
 
 ### 🎯 Quiz 2
 
-> Qual URL retorna os produtos do índice 5 ao 9 (5 itens)?
+> Qual URL retorna os produtos do índice 6 ao 10 (5 itens)?
 >
-> a) `/produtos/5/9`  
+> a) `/produtos/6/10`  
 > b) `/produtos?skip=5&limit=5`  
-> c) `/produtos?start=5&end=9`  
+> c) `/produtos?start=5&end=10`  
 > d) `/produtos/skip/5/limit/5`
 
 <details><summary>Ver resposta</summary>
@@ -197,9 +197,10 @@ print(criar_produto_sem_validacao({"nome": 42, "preco": -100}))
 from pydantic import BaseModel, Field, field_validator
 
 class Produto(BaseModel):
+    id: int         = len(produtos_db) + 1
     nome:     str   = Field(..., min_length=2, max_length=100)
     preco:    float = Field(..., gt=0, description="Deve ser maior que zero")
-    em_stock: bool  = True  # valor padrão
+    tipo: str       = Filed(..., )
 
 # ✅ Dados válidos
 p = Produto(nome="Notebook", preco=3500.0)
