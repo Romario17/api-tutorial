@@ -272,12 +272,9 @@ for err in r_invalido.json()["detail"]:
 
 ---
 
-## Parte 4 — CRUD Completo
+## Parte 4 — CRUD Completo com banco de dados
 
 Agora vamos construir uma API com as quatro operações fundamentais.
-O código completo está em `app/` no repositório e utiliza **Beanie** (ODM para MongoDB).
-
-Abaixo, usamos uma versão simplificada em memória para fins didáticos.
 
 ```python
 from fastapi import FastAPI, HTTPException, status
@@ -406,36 +403,6 @@ print("Restantes:", client4.get("/items").json())
 **b)** `204 No Content` indica sucesso sem corpo de resposta. É a convenção REST para operações de deleção.
 
 </details>
-
----
-
-## Parte 4b — Documentação Automática
-
-Um dos maiores diferenciais do FastAPI é gerar documentação interativa automaticamente.
-
-Para ver na prática, execute localmente:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-E acesse:
-
-- **Swagger UI**: http://127.0.0.1:8000/docs
-- **ReDoc**: http://127.0.0.1:8000/redoc
-- **Schema JSON**: http://127.0.0.1:8000/openapi.json
-
-O schema OpenAPI é gerado a partir dos seus type hints e modelos Pydantic.
-Ele pode ser usado para gerar clientes em outras linguagens automaticamente.
-
-```python
-# Você pode inspecionar o schema OpenAPI diretamente no notebook:
-import json
-schema = client4.get("/openapi.json").json()
-print("Título:", schema["info"]["title"])
-print("Rotas disponíveis:", list(schema["paths"].keys()))
-```
-
 ---
 
 ## Parte 5 — Tópicos Avançados
