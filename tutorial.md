@@ -660,17 +660,16 @@ app.add_middleware(
 
 ## 📚 Leitura Adicional
 
-| Recurso                      | Link                                                      |
-| ---------------------------- | --------------------------------------------------------- |
-| Documentação FastAPI         | https://fastapi.tiangolo.com/                             |
-| Tutorial FastAPI (oficial)   | https://fastapi.tiangolo.com/tutorial/                    |
-| FastAPI — Advanced           | https://fastapi.tiangolo.com/advanced/                    |
-| Pydantic v2                  | https://docs.pydantic.dev/                                |
-| HTTP Methods (MDN)           | https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods |
-| REST API Design              | https://restfulapi.net/                                   |
-| Fielding Dissertation (REST) | https://ics.uci.edu/~fielding/pubs/dissertation/top.htm   |
-| Beanie ODM                   | https://beanie-odm.dev/                                   |
-
+- [REST API Design Best Practices](https://restfulapi.net/)
+- [HTTP Methods — MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods)
+- [FastAPI — Documentação oficial](https://fastapi.tiangolo.com)
+- [Pydantic v2 — Documentação oficial](https://docs.pydantic.dev/latest/)
+- [python-jose — Documentação](https://python-jose.readthedocs.io)
+- [Beanie — Documentação oficial](https://beanie-odm.dev)
+- [pymongo — Documentação oficial](https://pymongo.readthedocs.io)
+- [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
+- [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+- [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
 ---
 
 ## 🎯 Desafio Final
