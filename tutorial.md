@@ -1,6 +1,6 @@
 # 🚀 Oficina: APIs com FastAPI
 
-> **Duração**: ~60 minutos | **Nível**: Básico → Intermediário
+> **Duração**: ~50 minutos | **Nível**: Básico → Intermediário
 >
 > **Repositório**: https://github.com/Romario17/api-tutorial
 
@@ -8,13 +8,15 @@
 
 ## 📋 Roteiro
 
-| #   | Tópico                            | Tempo   |
-| --- | --------------------------------- | ------- |
-| 1   | O que é uma API? REST e HTTP      | ~10 min |
-| 2   | FastAPI — Primeiros passos        | ~15 min |
-| 3   | Modelos e validação com Pydantic  | ~10 min |
-| 4   | CRUD completo                     | ~15 min |
-| 5   | Tópicos avançados (para explorar) | ~10 min |
+| #   | Tópico                           | Tempo   |
+| --- | -------------------------------- | ------- |
+| 1   | O que é uma API? REST e HTTP     | ~10 min |
+| 2   | FastAPI — Primeiros passos       | ~10 min |
+| 3   | Modelos e validação com Pydantic | ~10 min |
+| 4   | Documentação automática          | ~5 min  |
+| 5   | Injeção de dependência           | ~5 min  |
+| 6   | CRUD completo com banco de dados | ~10 min |
+| 7   | WebSockets                       | ~5 min  |
 
 ---
 
@@ -77,6 +79,8 @@ Também é comum usar `PATCH` para atualizações parciais (apenas alguns campos
 
 </details>
 
+---
+
 ## Parte 2 — FastAPI: Primeiros Passos
 
 ### Por que FastAPI?
@@ -91,18 +95,14 @@ Também é comum usar `PATCH` para atualizações parciais (apenas alguns campos
 
 ### Instalação
 
-```python
-python3 -m venv .venv && source .venv/bin/activate
+```bash
 pip install fastapi[standard]
 ```
-
-<!-- Aqui acho q dá pra colocar só pip install fastapi[standard] -->
 
 ### Sua primeira API em 10 linhas
 
 ```python
 from fastapi import FastAPI
-import uvicorn
 
 app = FastAPI(title="Minha Primeira API")
 
@@ -110,12 +110,12 @@ app = FastAPI(title="Minha Primeira API")
 def root():
     return {"mensagem": "Olá, mundo!"}
 
-@app.get("/saudacao")                       # Parametro de query
+@app.get("/saudacao")                       # Parâmetro de query
 def saudar(nome: str):
     return {"saudacao": f"Olá, {nome}!"}
 
-@app.get("/saudacao/{nome}")                # Parametro de URL
-def saudar(nome: str):
+@app.get("/saudacao/{nome}")                # Parâmetro de URL
+def saudar_path(nome: str):
     return {"saudacao": f"Olá, {nome}!"}
 ```
 
@@ -146,7 +146,7 @@ def buscar_produto(produto_id: int):
     for p in produtos_db:
         if p["id"] == produto_id:
             return p
-    raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return {"erro": "Produto não encontrado"}, 404
 
 
 # Testando diretamente com TestClient (sem iniciar servidor)
@@ -161,11 +161,11 @@ print("Produto 2:", client.get("/produtos/2").json())
 
 ### 🎯 Quiz 2
 
-> Qual URL retorna os produtos do índice 6 ao 10 (5 itens)?
+> Qual URL retorna os produtos do índice 5 ao 9 (5 itens)?
 >
-> a) `/produtos/6/10`  
+> a) `/produtos/5/9`  
 > b) `/produtos?skip=5&limit=5`  
-> c) `/produtos?start=5&end=10`  
+> c) `/produtos?start=5&end=9`  
 > d) `/produtos/skip/5/limit/5`
 
 <details><summary>Ver resposta</summary>
@@ -194,13 +194,12 @@ print(criar_produto_sem_validacao({"nome": 42, "preco": -100}))
 ```
 
 ```python
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 class Produto(BaseModel):
-    id:     int     = len(produtos_db) + 1
-    nome:   str     = Field(..., min_length=2, max_length=100)
-    preco:  float   = Field(..., gt=0, description="Deve ser maior que zero")
-    tipo:   str
+    nome:     str   = Field(..., min_length=2, max_length=100)
+    preco:    float = Field(..., gt=0, description="Deve ser maior que zero")
+    em_stock: bool  = True  # valor padrão
 
 # ✅ Dados válidos
 p = Produto(nome="Notebook", preco=3500.0)
@@ -273,25 +272,254 @@ for err in r_invalido.json()["detail"]:
 
 ---
 
-## Parte 4 — CRUD Completo com banco de dados
+## Parte 4 — Documentação Automática
 
-Agora vamos construir uma API com as quatro operações fundamentais.
+Nas seções anteriores você viu que o FastAPI usa type hints e modelos Pydantic para validar dados. Esse mesmo código que valida **também gera documentação interativa automaticamente** — sem escrever uma linha a mais.
+
+### Como acessar
+
+Suba o servidor com:
+
+```bash
+uvicorn main:app --reload
+```
+
+> `--reload` reinicia o servidor automaticamente a cada mudança no código. Ideal para desenvolvimento.
+
+Acesse no navegador:
+
+| URL                                  | Interface  | Descrição                                             |
+| ------------------------------------ | ---------- | ----------------------------------------------------- |
+| `http://localhost:8000/docs`         | Swagger UI | Interface interativa — permite testar as rotas direto |
+| `http://localhost:8000/redoc`        | ReDoc      | Documentação somente leitura, focada em navegação e referência |
+| `http://localhost:8000/openapi.json` | OpenAPI    | Especificação bruta em JSON (base das duas interfaces) |
+
+### Tudo que você já escreveu vira documentação
+
+```
+Seu código Python                      O que aparece no /docs
+──────────────────────────────────     ────────────────────────────────────
+@app.post("/items", status_code=201) → método POST, URL /items, status 201
+payload: ItemCreate                  → corpo JSON com schema dos campos
+response_model=Item                  → exemplo de resposta com todos os campos
+Field(..., gt=0, description="...")  → validações e descrição visíveis no schema
+```
+
+Não há duplicação: a fonte da verdade é o código Python.
+
+### Tags, summary e docstrings
+
+Pequenas adições enriquecem bastante o `/docs`:
 
 ```python
-from fastapi import FastAPI, HTTPException, status
-from fastapi.testclient import TestClient
+app = FastAPI(title="API de Produtos", version="1.0.0")
+
+@app.get(
+    "/produtos/{produto_id}",
+    tags=["Produtos"],               # agrupa rotas no menu lateral
+    summary="Busca um produto pelo ID",
+    response_description="Dados completos do produto",
+)
+def buscar_produto(produto_id: int):
+    """
+    Retorna um único produto a partir do seu identificador único.
+
+    - **produto_id**: inteiro positivo
+    - Retorna `404` se o produto não existir
+    """
+    ...
+```
+
+> O docstring da função (entre `"""`) aparece no Swagger como descrição detalhada da rota.
+
+### 🎯 Quiz 3
+
+> Qual afirmação sobre a documentação automática do FastAPI é **incorreta**?
+>
+> a) O Swagger UI permite testar as rotas diretamente no navegador  
+> b) A documentação precisa ser escrita manualmente em um arquivo YAML separado  
+> c) As validações do Pydantic aparecem automaticamente no schema  
+> d) `/openapi.json` contém a especificação bruta que alimenta o `/docs`
+
+<details><summary>Ver resposta</summary>
+
+**b)** A documentação **não** precisa ser escrita manualmente. O FastAPI gera a especificação OpenAPI automaticamente a partir dos type hints, modelos Pydantic e metadados das rotas.
+
+</details>
+
+---
+
+## Parte 5 — Injeção de Dependência
+
+Nas partes anteriores cada rota foi totalmente independente. Mas em aplicações reais, várias rotas compartilham a mesma lógica: verificar autenticação, validar paginação, abrir conexão com banco. Repetir esse código em cada rota cria duplicação e dificulta manutenção.
+
+**Dependency Injection** resolve isso: você define a lógica uma vez numa função, e o FastAPI a executa automaticamente antes da rota, injetando o resultado.
+
+```
+Sem DI                             Com DI
+──────────────────────────────     ──────────────────────────────────
+@app.get("/usuarios")              def paginacao(skip=0, limit=10):
+def listar(skip=0, limit=10):          return {"skip": skip, "limit": limit}
+    validar_paginacao(skip, limit)
+    ...                            @app.get("/usuarios")
+                                   def listar(p = Depends(paginacao)):
+@app.get("/produtos")                  ...
+def listar(skip=0, limit=10):
+    validar_paginacao(skip, limit) @app.get("/produtos")
+    ...                            def listar(p = Depends(paginacao)):
+                                       ...
+```
+
+### Exemplo: paginação compartilhada
+
+```python
+from fastapi import FastAPI, Depends, Query
+
+app = FastAPI()
+
+# A dependência é uma função comum — pode ter seus próprios parâmetros
+def paginacao(
+    skip:  int = Query(0,  ge=0),
+    limit: int = Query(10, ge=1, le=100),
+):
+    return {"skip": skip, "limit": limit}
+
+usuarios_db = ["Alice", "Bob", "Carol", "Dave", "Eve"]
+produtos_db = ["Notebook", "Mouse", "Teclado"]
+
+@app.get("/usuarios")
+def listar_usuarios(pagina: dict = Depends(paginacao)):
+    return usuarios_db[pagina["skip"] : pagina["skip"] + pagina["limit"]]
+
+@app.get("/produtos")
+def listar_produtos(pagina: dict = Depends(paginacao)):
+    return produtos_db[pagina["skip"] : pagina["skip"] + pagina["limit"]]
+```
+
+Mudar as regras de paginação em um único lugar afeta todas as rotas que a usam. O FastAPI também documenta automaticamente os parâmetros da dependência no `/docs` de cada rota.
+
+### Dependências com verificação de acesso
+
+O padrão se torna ainda mais poderoso para autenticação. A dependência verifica o token e retorna o usuário — ou lança `HTTPException` antes da rota ser executada:
+
+```python
+from fastapi import Depends, HTTPException, Header
+
+def usuario_autenticado(authorization: str = Header(...)):
+    token = authorization.removeprefix("Bearer ")
+    usuario = verificar_token(token)   # lógica de validação JWT
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    return usuario
+
+@app.get("/perfil")
+def perfil(usuario = Depends(usuario_autenticado)):
+    return {"nome": usuario.nome}
+
+@app.delete("/conta")
+def excluir_conta(usuario = Depends(usuario_autenticado)):
+    ...  # usuário já validado, sem repetir código
+```
+
+### 🎯 Quiz 4
+
+> O que acontece se uma dependência lançar `HTTPException`?
+>
+> a) O erro é ignorado e a rota continua executando  
+> b) A execução da rota é interrompida e o erro é retornado ao cliente  
+> c) A dependência é chamada novamente até ter sucesso  
+> d) O FastAPI retorna status `200` com o detalhe do erro no corpo
+
+<details><summary>Ver resposta</summary>
+
+**b)** A `HTTPException` lançada dentro de uma dependência interrompe imediatamente a cadeia e retorna a resposta de erro — a função da rota nunca chega a ser executada.
+
+</details>
+
+---
+
+## Parte 6 — CRUD Completo com Banco de Dados
+
+Com verbos HTTP (Parte 1), parâmetros de rota (Parte 2), modelos Pydantic (Parte 3) e injeção de dependência (Parte 5) em mãos, podemos montar um CRUD completo — desta vez com persistência real usando **Beanie**.
+
+### Por que Beanie?
+
+**Beanie** é um ODM (_Object Document Mapper_) assíncrono para MongoDB. A grande vantagem é que ele usa **Pydantic como base** — os modelos que você já conhece viram documentos no banco sem precisar de um schema separado.
+
+```
+Pydantic puro                       Beanie (persiste no MongoDB)
+──────────────────────────────      ──────────────────────────────────
+class Item(BaseModel):              class Item(Document):
+    name: str                           name: str
+    price: float                        price: float
+                                        class Settings:
+# dado só existe em memória                 name = "items"  # coleção
+```
+
+### Configuração da conexão com `lifespan`
+
+`lifespan` é um gerenciador de contexto que roda código na **inicialização** e no **encerramento** da aplicação — o lugar certo para abrir e fechar a conexão com o banco:
+
+```python
+from beanie import Document, init_beanie
+from pymongo import AsyncMongoClient
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    client = AsyncMongoClient("mongodb://localhost:27017")
+    await init_beanie(database=client["meu_db"], document_models=[Item])
+    yield          # aplicação fica disponível aqui
+    client.close() # executado no encerramento
+
+app = FastAPI(lifespan=lifespan)
+```
+
+### Dois modelos para o mesmo recurso
+
+```
+ItemCreate  →  o que o cliente ENVIA    (sem ID — o MongoDB gera um ObjectId)
+Item        →  o que o servidor RETORNA (com ID — já foi persistido)
+```
+
+Separar os modelos impede que o cliente force um ID arbitrário e deixa explícito o contrato de cada rota. Com Beanie, `Item` herda de `Document` e carrega o `id` automaticamente após o `insert`.
+
+### Retornando erros corretamente com `HTTPException`
+
+Na Parte 2, quando um produto não era encontrado, retornávamos um dicionário de erro — mas o status HTTP continuava `200 OK`. `HTTPException` corrige isso: interrompe a rota e envia o status certo:
+
+```python
+item = await Item.get(item_id)
+if not item:
+    raise HTTPException(status_code=404, detail="Item não encontrado")
+```
+
+### Código completo
+
+```python
+from beanie import Document, PydanticObjectId, init_beanie
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from pymongo import AsyncMongoClient
 from pydantic import BaseModel, Field
 
 # --- Modelos ---
 
-class ItemBase(BaseModel):
+class Item(Document):
     name:        str         = Field(..., min_length=1, max_length=100)
     description: str | None = None
     price:       float       = Field(..., gt=0)
     in_stock:    bool        = True
 
-class ItemCreate(ItemBase):
-    pass
+    class Settings:
+        name = "items"
+
+class ItemCreate(BaseModel):
+    name:        str         = Field(..., min_length=1, max_length=100)
+    description: str | None = None
+    price:       float       = Field(..., gt=0)
+    in_stock:    bool        = True
 
 class ItemUpdate(BaseModel):
     name:        str | None   = None
@@ -299,103 +527,61 @@ class ItemUpdate(BaseModel):
     price:       float | None = None
     in_stock:    bool | None  = None
 
-class Item(ItemBase):
-    id: int
+# --- Configuração ---
 
-# --- "Banco de dados" em memória ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    client = AsyncMongoClient("mongodb://localhost:27017")
+    await init_beanie(database=client["meu_db"], document_models=[Item])
+    yield
+    client.close()
 
-_items:   dict[int, Item] = {}
-_counter: int             = 0
+app = FastAPI(title="CRUD de Itens", lifespan=lifespan)
 
-# --- Aplicação ---
+# --- Rotas ---
 
-app4 = FastAPI(title="CRUD de Itens")
+@app.get("/items", response_model=list[Item])
+async def list_items():
+    return await Item.find_all().to_list()
 
-@app4.get("/items", response_model=list[Item])
-def list_items():
-    return list(_items.values())
-
-@app4.get("/items/{item_id}", response_model=Item)
-def get_item(item_id: int):
-    if item_id not in _items:
+@app.get("/items/{item_id}", response_model=Item)
+async def get_item(item_id: PydanticObjectId):
+    item = await Item.get(item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
-    return _items[item_id]
-
-@app4.post("/items", response_model=Item, status_code=201)
-def create_item(payload: ItemCreate):
-    global _counter
-    _counter += 1
-    item = Item(id=_counter, **payload.model_dump())
-    _items[item.id] = item
     return item
 
-@app4.put("/items/{item_id}", response_model=Item)
-def update_item(item_id: int, payload: ItemUpdate):
-    if item_id not in _items:
+@app.post("/items", response_model=Item, status_code=201)
+async def create_item(payload: ItemCreate):
+    item = Item(**payload.model_dump())
+    await item.insert()
+    return item
+
+@app.put("/items/{item_id}", response_model=Item)
+async def update_item(item_id: PydanticObjectId, payload: ItemUpdate):
+    item = await Item.get(item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
-    stored = _items[item_id]
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
-    updated = stored.model_copy(update=updates)
-    _items[item_id] = updated
-    return updated
+    await item.set(updates)
+    return item
 
-@app4.delete("/items/{item_id}", status_code=204)
-def delete_item(item_id: int):
-    if item_id not in _items:
+@app.delete("/items/{item_id}", status_code=204)
+async def delete_item(item_id: PydanticObjectId):
+    item = await Item.get(item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
-    del _items[item_id]
-
-print("Aplicação CRUD criada!")
+    await item.delete()
 ```
 
-```python
-client4 = TestClient(app4)
+> Todas as rotas são `async def` porque operações de banco são I/O — o servidor não precisa ficar bloqueado esperando a resposta do MongoDB.
 
-# 1. POST — Criar itens
-r1 = client4.post("/items", json={"name": "Notebook", "price": 3500.0})
-r2 = client4.post("/items", json={"name": "Mouse",    "price": 89.90})
-r3 = client4.post("/items", json={"name": "Teclado",  "price": 199.0, "in_stock": False})
-print("Criados:", r1.json(), r2.json(), r3.json(), sep="\n")
-```
-
-```python
-# 2. GET — Listar todos
-import json
-r = client4.get("/items")
-print("Todos os itens:")
-print(json.dumps(r.json(), indent=2, ensure_ascii=False))
-```
-
-```python
-# 3. GET por ID
-print(client4.get("/items/1").json())
-
-# GET com ID inexistente
-r_nf = client4.get("/items/999")
-print("Status 404:", r_nf.status_code, r_nf.json())
-```
-
-```python
-# 4. PUT — Atualizar
-r_up = client4.put("/items/1", json={"price": 3200.0, "description": "Modelo 2025"})
-print("Atualizado:", r_up.json())
-```
-
-```python
-# 5. DELETE — Remover
-r_del = client4.delete("/items/2")
-print("Deletado — status:", r_del.status_code)  # 204
-
-# Confirma remoção
-print("Restantes:", client4.get("/items").json())
-```
-
-### 🎯 Quiz 3
+### 🎯 Quiz 5
 
 > A rota `DELETE /items/{item_id}` retorna status `204`. Por que não retorna `200`?
 >
 > a) Porque `204` significa "proibido"  
-> b) Porque `204` significa "sem conteúdo" — a resposta não tem corpo, o que é correto para um DELETE bem-sucedido  
+> b) Porque `204` significa "sem conteúdo" — correto para DELETE, que não tem corpo de resposta  
 > c) Porque o item não foi encontrado  
 > d) É um bug — deveria retornar `200`
 
@@ -403,211 +589,127 @@ print("Restantes:", client4.get("/items").json())
 
 **b)** `204 No Content` indica sucesso sem corpo de resposta. É a convenção REST para operações de deleção.
 
-## </details>
-
-## Parte 5 — Tópicos Avançados
-
-Os tópicos abaixo estão além do escopo desta oficina de 1 hora,
-mas são essenciais para aplicações em produção. Cada um tem links para
-a documentação oficial e exemplos práticos.
+</details>
 
 ---
 
-### 🔐 5.1 Autenticação e Autorização
+## Parte 7 — WebSockets
 
-| Abordagem                 | Quando usar                                       |
-| ------------------------- | ------------------------------------------------- |
-| **JWT** (JSON Web Tokens) | APIs stateless; autenticação por token            |
-| **OAuth2**                | Login com Google/GitHub; autorização delegada     |
-| **API Keys**              | Integração entre serviços; simples de implementar |
+Até agora toda comunicação seguiu o modelo **requisição → resposta**: o cliente pergunta, o servidor responde, a conexão é encerrada. Isso funciona bem para a maioria dos casos — mas não para situações que exigem atualizações em tempo real.
 
-FastAPI tem suporte nativo a OAuth2 com Bearer tokens:
+### O problema do modelo HTTP clássico
+
+```
+HTTP tradicional (polling)                 WebSocket
+──────────────────────────────────         ──────────────────────────────────
+Cliente: "há mensagens novas?"             Cliente ←──────────── Servidor
+Servidor: "não"                                     conexão aberta
+Cliente: "há mensagens novas?"                      (bidirecional)
+Servidor: "não"                            Servidor envia mensagem quando quiser
+Cliente: "há mensagens novas?"             Cliente envia mensagem quando quiser
+Servidor: "sim! aqui está"
+```
+
+O polling gera tráfego desnecessário e atraso. O WebSocket mantém uma **conexão persistente e bidirecional** — servidor e cliente podem se enviar mensagens a qualquer momento.
+
+### Casos de uso típicos
+
+- Chats e sistemas de mensagens
+- Notificações em tempo real (delivery, leilões, bolsa)
+- Dashboards ao vivo (monitoramento, métricas)
+- Jogos multiplayer e editores colaborativos
+
+### WebSocket no FastAPI
+
+O FastAPI suporta WebSockets nativamente. Rotas WebSocket são sempre `async def` — a conexão precisa aguardar eventos sem bloquear o servidor:
 
 ```python
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+app = FastAPI()
 
-@app.get("/perfil")
-def perfil(token: str = Depends(oauth2_scheme)):
-    # valide o token aqui (ex: com python-jose)
-    ...
+@app.websocket("/ws/chat")
+async def chat(websocket: WebSocket):
+    await websocket.accept()           # aceita a conexão
+    try:
+        while True:
+            msg = await websocket.receive_text()     # aguarda mensagem do cliente
+            await websocket.send_text(f"Eco: {msg}") # responde
+    except WebSocketDisconnect:
+        print("Cliente desconectou")   # conexão encerrada normalmente
 ```
 
-📚 Referências:
+### Gerenciando múltiplos clientes conectados
 
-- [FastAPI Security](https://fastapi.tiangolo.com/tutorial/security/)
-- [python-jose](https://github.com/mpdavis/python-jose)
-- [passlib (hash de senhas)](https://passlib.readthedocs.io/)
-
----
-
-### 🗄️ 5.2 Banco de Dados com Beanie (MongoDB ODM)
-
-Este projeto usa **Beanie** como ODM (Object Document Mapper) para MongoDB.
-Beanie é assíncrono, usa modelos Pydantic como base e se integra perfeitamente ao FastAPI:
+Na prática, você precisa de um gerenciador que rastreie quem está conectado e distribua mensagens para todos (broadcast):
 
 ```python
-from beanie import Document, init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import Field
+class GerenciadorDeConexoes:
+    def __init__(self):
+        self.ativas: list[WebSocket] = []
 
-class Hero(Document):
-    name: str
-    age:  int | None = None
+    async def conectar(self, ws: WebSocket):
+        await ws.accept()
+        self.ativas.append(ws)
 
-    class Settings:
-        name = "heroes"  # nome da coleção no MongoDB
+    def desconectar(self, ws: WebSocket):
+        self.ativas.remove(ws)
 
-# Inicialização (normalmente no lifespan do FastAPI)
-client = AsyncIOMotorClient("mongodb://localhost:27017")
-await init_beanie(database=client["meu_db"], document_models=[Hero])
+    async def broadcast(self, mensagem: str):
+        for ws in self.ativas:
+            await ws.send_text(mensagem)
 
-# CRUD assíncrono
-hero = Hero(name="Spider-Man", age=18)
-await hero.insert()                        # INSERT
-todos = await Hero.find_all().to_list()    # SELECT *
-um = await Hero.get(hero.id)               # SELECT by ID
-await hero.set({Hero.age: 19})             # UPDATE
-await hero.delete()                        # DELETE
+gerenciador = GerenciadorDeConexoes()
+
+@app.websocket("/ws/sala")
+async def sala(websocket: WebSocket):
+    await gerenciador.conectar(websocket)
+    try:
+        while True:
+            msg = await websocket.receive_text()
+            await gerenciador.broadcast(f"Usuário disse: {msg}")
+    except WebSocketDisconnect:
+        gerenciador.desconectar(websocket)
+        await gerenciador.broadcast("Um usuário saiu da sala.")
 ```
 
-📚 Referências:
+### No lado do cliente (JavaScript)
 
-- [Beanie docs](https://beanie-odm.dev/)
-- [Motor (driver async MongoDB)](https://motor.readthedocs.io/)
-- [MongoDB Atlas (free tier)](https://www.mongodb.com/atlas)
+```javascript
+const ws = new WebSocket("ws://localhost:8000/ws/sala");
 
----
-
-### ⚡ 5.3 Endpoints Assíncronos (`async`/`await`)
-
-FastAPI suporta programação assíncrona nativamente, ideal para I/O intensivo:
-
-```python
-import httpx
-
-@app.get("/dados-externos")
-async def buscar_dados():
-    async with httpx.AsyncClient() as client:
-        resp = await client.get("https://api.exemplo.com/dados")
-        return resp.json()
+ws.onopen    = ()    => ws.send("Olá a todos!");
+ws.onmessage = (evt) => console.log("Recebido:", evt.data);
+ws.onclose   = ()    => console.log("Conexão encerrada");
 ```
 
-📚 Referências:
+### 🎯 Quiz 6
 
-- [FastAPI Async](https://fastapi.tiangolo.com/async/)
-- [asyncio docs](https://docs.python.org/3/library/asyncio.html)
-
----
-
-### 🧩 5.4 Dependency Injection
-
-FastAPI usa injeção de dependência para compartilhar recursos (configurações, autenticação, filtros):
-
-```python
-from fastapi import Depends, Query
-
-async def filtro_paginacao(skip: int = Query(0, ge=0), limit: int = Query(10, ge=1, le=100)):
-    return {"skip": skip, "limit": limit}
-
-@app.get("/usuarios")
-async def listar(paginacao: dict = Depends(filtro_paginacao)):
-    return await UserDocument.find_all().skip(paginacao["skip"]).limit(paginacao["limit"]).to_list()
-```
-
-📚 Referências:
-
-- [FastAPI Dependencies](https://fastapi.tiangolo.com/tutorial/dependencies/)
-
----
-
-### 🧪 5.5 Testes com pytest
-
-```python
-# test_main.py
-from fastapi.testclient import TestClient
-from app.main import app
-
-client = TestClient(app)
-
-def test_root():
-    r = client.get("/")
-    assert r.status_code == 200
-
-def test_criar_item():
-    r = client.post("/items", json={"name": "Teste", "price": 10.0})
-    assert r.status_code == 201
-    assert r.json()["name"] == "Teste"
-```
-
-```bash
-pytest -v
-```
-
-📚 Referências:
-
-- [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
-
-### 📡 5.6 WebSockets e Background Tasks
-
-FastAPI suporta comunicação em tempo real e processamento em background:
-
-```python
-from fastapi import BackgroundTasks
-
-def enviar_email(email: str):
-    # executa após retornar a resposta
-    ...
-
-@app.post("/cadastro")
-def cadastrar(bg: BackgroundTasks, email: str):
-    bg.add_task(enviar_email, email)
-    return {"status": "cadastrado"}
-```
-
-📚 Referências:
-
-- [Background Tasks](https://fastapi.tiangolo.com/tutorial/background-tasks/)
-- [WebSockets](https://fastapi.tiangolo.com/advanced/websockets/)
-
----
-
-## 📚 Leitura Adicional
-
-- [REST API Design Best Practices](https://restfulapi.net/)
-- [HTTP Methods — MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Methods)
-- [FastAPI — Documentação oficial](https://fastapi.tiangolo.com)
-- [Pydantic v2 — Documentação oficial](https://docs.pydantic.dev/latest/)
-- [python-jose — Documentação](https://python-jose.readthedocs.io)
-- [Beanie — Documentação oficial](https://beanie-odm.dev)
-- [pymongo — Documentação oficial](https://pymongo.readthedocs.io)
-- [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
-- [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
-- [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
-
----
-
-## 🎯 Desafio Final
-
-> Adicione ao CRUD da Parte 4 um endpoint `GET /items?in_stock=true` que filtre apenas itens disponíveis em estoque.
+> Qual afirmação descreve melhor a diferença entre HTTP e WebSocket?
 >
-> **Dica**: use query parameters opcionais com `Optional[bool] = None`.
+> a) WebSocket só funciona com métodos GET  
+> b) HTTP mantém a conexão aberta; WebSocket abre e fecha a cada mensagem  
+> c) WebSocket permite comunicação bidirecional contínua; HTTP fecha a conexão após cada resposta  
+> d) São idênticos — WebSocket é apenas um nome mais moderno para HTTP
 
-<details><summary>Ver solução</summary>
+<details><summary>Ver resposta</summary>
 
-```python
-@app.get("/items", response_model=list[ItemResponse])
-async def list_items(in_stock: bool | None = None):
-    if in_stock is not None:
-        items = await ItemDocument.find(ItemDocument.in_stock == in_stock).to_list()
-    else:
-        items = await ItemDocument.find_all().to_list()
-    return [_to_response(i) for i in items]
-```
+**c)** WebSocket estabelece uma conexão persistente e bidirecional. No HTTP clássico, cada ciclo requisição–resposta encerra a conexão (ou a reutiliza via keep-alive, mas ainda é unidirecional por requisição).
 
 </details>
 
+---
+
+## 📚 Para continuar explorando
+
+- [FastAPI — Documentação oficial](https://fastapi.tiangolo.com)
+- [Pydantic v2 — Documentação oficial](https://docs.pydantic.dev/latest/)
+- [FastAPI Security (JWT + OAuth2)](https://fastapi.tiangolo.com/tutorial/security/)
+- [FastAPI Dependencies](https://fastapi.tiangolo.com/tutorial/dependencies/)
+- [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
+- [Beanie — ODM assíncrono para MongoDB](https://beanie-odm.dev)
+- [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+- [REST API Design Best Practices](https://restfulapi.net/)
 ---
 
 **Obrigado!** 🎉  
