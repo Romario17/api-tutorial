@@ -549,31 +549,7 @@ pytest -v
 
 - [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
 
----
-
-### 🐳 5.6 Deploy com Docker
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-```bash
-docker build -t api-tutorial .
-docker run -p 8000:8000 api-tutorial
-```
-
-📚 Referências:
-
-- [FastAPI Docker](https://fastapi.tiangolo.com/deployment/docker/)
-
----
-
-### 📡 5.7 WebSockets e Background Tasks
+### 📡 5.6 WebSockets e Background Tasks
 
 FastAPI suporta comunicação em tempo real e processamento em background:
 
@@ -597,7 +573,7 @@ def cadastrar(bg: BackgroundTasks, email: str):
 
 ---
 
-### 📊 5.8 Middleware e CORS
+### 📊 5.7 Middleware e CORS
 
 ```python
 from fastapi.middleware.cors import CORSMiddleware
