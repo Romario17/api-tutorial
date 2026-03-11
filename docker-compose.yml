@@ -40,7 +40,7 @@ services:
       - SMTP_PORT=1025
       - FROM_EMAIL=ticketflow@demo.local
       - NOTIFY_EMAIL=admin@demo.local
-      - WEBHOOK_SECRET=c5926730e852f3c23995fb99f1e321cefb30ed8c7ce8979997ae0f39c1447b72
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - MAIN_API_URL=http://app:8000
       - SELF_URL=http://email-notifier:8001/webhook
       - RETRY_DELAY=3
