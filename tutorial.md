@@ -1,6 +1,6 @@
 # 🚀 Oficina: APIs com FastAPI
 
-> **Duração**: ~50 minutos | **Nível**: Básico → Intermediário
+> **Duração**: ~80 minutos | **Nível**: Básico → Intermediário
 >
 > **Repositório**: https://github.com/Romario17/api-tutorial
 
@@ -16,7 +16,9 @@
 | 4   | Documentação automática          | ~5 min  |
 | 5   | Injeção de dependência           | ~5 min  |
 | 6   | CRUD completo com banco de dados | ~10 min |
-| 7   | WebSockets                       | ~5 min  |
+| 7   | WebSockets                       | ~10 min |
+| 8   | Server-Sent Events (SSE)         | ~10 min |
+| 9   | Webhooks                         | ~10 min |
 
 ---
 
@@ -614,10 +616,52 @@ O polling gera tráfego desnecessário e atraso. O WebSocket mantém uma **conex
 
 ### Casos de uso típicos
 
-- Chats e sistemas de mensagens
-- Notificações em tempo real (delivery, leilões, bolsa)
-- Dashboards ao vivo (monitoramento, métricas)
-- Jogos multiplayer e editores colaborativos
+- **Chat em tempo real** entre usuários (como o chat por ticket do TicketFlow).
+- **Colaboração ao vivo** (edição simultânea de documentos, quadros brancos).
+- **Jogos multiplayer** onde latência mínima é essencial.
+- **Dashboards ao vivo** (monitoramento, métricas, leilões, bolsa).
+- Cenários em que **ambas as partes** precisam enviar dados a qualquer momento.
+
+### O que é WebSocket? (RFC 6455)
+
+**WebSocket** (RFC 6455) é um protocolo de comunicação **bidirecional e full-duplex** que opera sobre uma única conexão TCP persistente. Ao contrário do HTTP tradicional (requisição-resposta), o WebSocket permite que **tanto o servidor quanto o cliente enviem mensagens a qualquer momento**, sem que um precise esperar pelo outro.
+
+### Como a conexão é estabelecida
+
+A conexão WebSocket começa como uma requisição HTTP convencional com um cabeçalho `Upgrade: websocket`. Se o servidor aceita, ocorre o **handshake** e a conexão é "promovida" de HTTP para WebSocket. A partir desse ponto, o canal TCP permanece aberto e ambos os lados podem transmitir frames de dados de forma independente.
+
+```mermaid
+sequenceDiagram
+    actor Cliente
+    participant Servidor
+
+    Cliente->>Servidor: GET /ws/tickets/{id}?token=<jwt>\nUpgrade: websocket\nConnection: Upgrade
+    Servidor-->>Cliente: 101 Switching Protocols\nUpgrade: websocket
+    Note over Cliente,Servidor: Conexão TCP promovida — canal bidirecional aberto
+
+    par Mensagens simultâneas
+        Cliente->>Servidor: {"message": "Olá, preciso de ajuda!"}
+        Servidor->>Cliente: {"type": "message", "author": "agente", "message": "Como posso ajudar?"}
+    end
+
+    Cliente--xServidor: Frame Close
+    Servidor--xCliente: Frame Close ACK
+```
+
+### Características principais
+
+| Característica | Detalhe |
+|----------------|---------|
+| **Direção** | Bidirecional (full-duplex) |
+| **Protocolo** | `ws://` ou `wss://` (TLS) após upgrade HTTP |
+| **Formato de dados** | Frames binários ou texto — sem restrição de formato |
+| **Latência** | Muito baixa — sem overhead de cabeçalhos HTTP por mensagem |
+| **Reconexão** | Não automática — o cliente deve implementar lógica de reconexão |
+
+### Quando *não* usar WebSocket
+
+- Quando apenas o servidor envia dados (prefira SSE — mais simples).
+- Quando a comunicação é esporádica e do tipo requisição-resposta (prefira REST).
 
 ### WebSocket no FastAPI
 
@@ -698,6 +742,328 @@ ws.onclose   = ()    => console.log("Conexão encerrada");
 
 </details>
 
+### Como funciona no TicketFlow
+
+No TicketFlow, cada ticket possui sua própria "sala" WebSocket. Quando dois usuários se conectam ao mesmo ticket, ambos passam a receber em tempo real todas as mensagens trocadas naquele ticket:
+
+```mermaid
+sequenceDiagram
+    actor Alice as Cliente (Alice)
+    participant API as FastAPI
+    participant WS as WebSocketManager
+    actor Bob as Cliente (Bob)
+
+    Alice->>API: WS /ws/tickets/abc?token=<jwt_alice>
+    API->>API: Valida JWT
+    API->>WS: connect("abc", ws_alice)
+    WS-->>Bob: {"type":"user_joined","author":"alice"}
+
+    Bob->>API: WS /ws/tickets/abc?token=<jwt_bob>
+    API->>WS: connect("abc", ws_bob)
+    WS-->>Alice: {"type":"user_joined","author":"bob"}
+
+    Alice->>API: "Meu computador não liga"
+    API->>WS: broadcast_to_ticket("abc", msg)
+    WS-->>Alice: {"type":"message","author":"alice","message":"Meu computador não liga"}
+    WS-->>Bob: {"type":"message","author":"alice","message":"Meu computador não liga"}
+
+    Bob->>API: "Verifique o cabo de energia"
+    API->>WS: broadcast_to_ticket("abc", msg)
+    WS-->>Alice: {"type":"message","author":"bob","message":"Verifique o cabo de energia"}
+    WS-->>Bob: {"type":"message","author":"bob","message":"Verifique o cabo de energia"}
+
+    Alice--xAPI: WebSocketDisconnect
+    WS-->>Bob: {"type":"user_left","author":"alice"}
+```
+
+### Implementação no projeto
+
+O `WebSocketManager` (`app/core/websocket_manager.py`) agrupa conexões WebSocket ativas por `ticket_id` usando um `defaultdict(list)`. Quando uma mensagem é enviada por um participante, o manager itera sobre todas as conexões do ticket e envia o JSON via `send_text()`. Conexões "mortas" (que falharam ao enviar) são removidas silenciosamente, garantindo robustez. A autenticação ocorre via query parameter `token` porque o protocolo WebSocket no navegador não suporta envio de cabeçalhos HTTP personalizados durante o handshake (limitação da API `WebSocket` do JavaScript).
+
+---
+
+## Parte 8 — Server-Sent Events (SSE)
+
+Nas partes anteriores vimos REST (requisição–resposta) e WebSocket (bidirecional persistente). Mas há cenários em que apenas o **servidor** precisa enviar dados ao cliente — sem que o cliente precise responder. Para isso existe o **SSE**.
+
+### O que é SSE?
+
+**Server-Sent Events (SSE)** é um mecanismo padronizado pela W3C/WHATWG que permite ao servidor enviar atualizações **unidirecionais** para o cliente por meio de uma conexão HTTP de longa duração. Diferentemente do polling tradicional — onde o cliente envia requisições repetidas perguntando "há novidades?" — com SSE o servidor mantém a conexão aberta e envia dados assim que eles estão disponíveis.
+
+```
+Polling tradicional                       SSE
+──────────────────────────────────        ──────────────────────────────────
+Cliente: "novidades?"  → Servidor         Cliente ←────────── Servidor
+Servidor: "não"                                   conexão HTTP aberta
+Cliente: "novidades?"  → Servidor         Servidor envia dados quando quiser
+Servidor: "não"                           Cliente apenas recebe
+Cliente: "novidades?"  → Servidor
+Servidor: "sim! aqui está"
+```
+
+### Características principais
+
+| Característica | Detalhe |
+|----------------|---------|
+| **Direção** | Unidirecional: servidor → cliente |
+| **Protocolo** | HTTP/1.1 (ou HTTP/2) convencional |
+| **Formato** | Texto puro (`text/event-stream`) com campos `event:`, `data:`, `id:`, `retry:` |
+| **Reconexão** | Automática — o navegador reconecta com o último `id` recebido |
+| **API no navegador** | `EventSource` (nativa, sem bibliotecas extras) |
+
+### Quando usar SSE
+
+- **Painéis de monitoramento** que precisam refletir mudanças em tempo real.
+- **Feeds de notificações** onde o cliente apenas *recebe* informação.
+- Cenários em que **simplicidade** é prioridade, pois SSE funciona sobre HTTP comum (sem upgrade de protocolo) e atravessa proxies e firewalls com facilidade.
+
+### Quando *não* usar SSE
+
+- Quando o cliente também precisa enviar dados ao servidor simultaneamente (prefira WebSocket).
+- Quando a latência abaixo de milissegundos é crítica (ex.: jogos multiplayer).
+
+### SSE no FastAPI
+
+O FastAPI suporta SSE por meio do `StreamingResponse` — basta retornar um **gerador assíncrono** que produz strings no formato `text/event-stream`:
+
+```python
+import asyncio
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+
+app = FastAPI()
+
+async def gerador_eventos():
+    """Gera eventos SSE a cada 2 segundos."""
+    contador = 0
+    while True:
+        contador += 1
+        # Formato SSE: cada bloco termina com \n\n
+        yield f"event: atualização\ndata: {{\"contador\": {contador}}}\n\n"
+        await asyncio.sleep(2)
+
+@app.get("/stream/eventos")
+async def stream():
+    return StreamingResponse(
+        gerador_eventos(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+```
+
+### No lado do cliente (JavaScript)
+
+```javascript
+const source = new EventSource("http://localhost:8000/stream/eventos");
+
+source.addEventListener("atualização", (event) => {
+    const dados = JSON.parse(event.data);
+    console.log("Contador:", dados.contador);
+});
+
+source.onerror = () => console.log("Conexão perdida — reconectando automaticamente...");
+// O EventSource reconecta automaticamente!
+```
+
+### Como funciona no TicketFlow
+
+No TicketFlow, o SSE é usado para alimentar o painel de monitoramento de tickets em tempo real. Quando qualquer ticket é criado ou atualizado, todos os clientes conectados recebem o evento instantaneamente:
+
+```mermaid
+sequenceDiagram
+    actor Cliente
+    participant API as FastAPI
+    participant SSE as SSEManager
+
+    Cliente->>API: GET /stream/tickets?token=<jwt>
+    activate API
+    API->>API: Valida JWT (query param)
+    API-->>Cliente: 200 Content-Type: text/event-stream
+
+    loop Conexão aberta
+        SSE-->>Cliente: event: ticket.created\ndata: {"id":"...","title":"..."}\n\n
+        SSE-->>Cliente: event: ticket.updated\ndata: {"id":"...","status":"in_progress"}\n\n
+        Note right of SSE: Keep-alive a cada 15s\n(": keep-alive\n\n")
+    end
+
+    Cliente--xAPI: Desconexão (navegador fecha)
+    deactivate API
+```
+
+### Implementação no projeto
+
+O `SSEManager` (`app/core/sse.py`) utiliza uma **fila `asyncio.Queue` por cliente** para desacoplar os produtores de eventos (serviços de domínio) dos consumidores (streams SSE). Quando um ticket é criado ou alterado, o `TicketService` chama `sse_manager.broadcast(event_type, data)`, que coloca a mensagem formatada em todas as filas ativas. Cada cliente conectado consome sua fila via um **gerador assíncrono** que também emite um comentário keep-alive a cada 15 segundos para evitar que proxies intermediários encerrem a conexão por inatividade.
+
+### Diferença entre SSE e WebSocket
+
+| Aspecto | SSE | WebSocket |
+|---------|-----|-----------|
+| Direção | Servidor → Cliente | Bidirecional |
+| Protocolo | HTTP padrão | Protocolo próprio (upgrade) |
+| Reconexão | Automática (`EventSource`) | Manual |
+| Overhead | Baixo (HTTP) | Muito baixo (frames binários) |
+| Proxy/firewall | Transparente | Pode exigir configuração |
+| Caso de uso típico | Dashboards, notificações | Chat, jogos, colaboração |
+
+### 🎯 Quiz 7
+
+> Qual das alternativas descreve **corretamente** o SSE?
+>
+> a) SSE permite comunicação bidirecional entre cliente e servidor  
+> b) O navegador precisa de uma biblioteca JavaScript extra para usar SSE  
+> c) SSE mantém uma conexão HTTP aberta e o servidor envia eventos quando disponíveis  
+> d) SSE exige um upgrade de protocolo igual ao WebSocket
+
+<details><summary>Ver resposta</summary>
+
+**c)** SSE usa HTTP convencional — o servidor mantém a conexão aberta e envia dados no formato `text/event-stream`. A API `EventSource` é nativa no navegador (sem bibliotecas extras) e reconecta automaticamente.
+
+</details>
+
+---
+
+## Parte 9 — Webhooks
+
+WebSocket e SSE resolvem comunicação em tempo real com o **navegador**. Mas e quando o destino é outro **servidor** — um CRM, um sistema de e-mail, ou um pipeline de CI/CD? Para isso existe o **Webhook**.
+
+### O que é um Webhook?
+
+**Webhook** é um padrão de integração baseado em **callbacks HTTP**: em vez de o sistema consumidor fazer polling para verificar se algo mudou, o sistema produtor envia uma requisição HTTP POST automaticamente para uma URL previamente cadastrada, assim que o evento ocorre. É frequentemente descrito como "HTTP push" ou "reverse API".
+
+```
+Polling (consumidor pergunta)              Webhook (produtor avisa)
+──────────────────────────────────         ──────────────────────────────────
+Consumidor: "houve mudança?"               Produtor detecta evento
+Produtor: "não"                            Produtor: POST https://consumidor/hook
+Consumidor: "houve mudança?"                         {"event": "ticket.created", ...}
+Produtor: "não"                            Consumidor processa o evento
+Consumidor: "houve mudança?"
+Produtor: "sim!" (mas já passou tempo)
+```
+
+### Como funciona
+
+1. O sistema consumidor **cadastra uma URL** (endpoint de callback) junto ao sistema produtor, informando quais eventos deseja receber.
+2. Quando um evento relevante ocorre, o produtor **serializa o payload** em JSON e **dispara um POST** para a URL cadastrada.
+3. O consumidor **recebe o POST**, valida a autenticidade (ex.: via HMAC) e processa o evento.
+
+### Características principais
+
+| Característica | Detalhe |
+|----------------|---------|
+| **Direção** | Produtor → Consumidor (push) |
+| **Protocolo** | HTTP convencional (POST) |
+| **Acoplamento** | Fraco — produtor e consumidor se comunicam apenas via contrato HTTP |
+| **Autenticação** | Normalmente via assinatura HMAC no cabeçalho da requisição |
+| **Confiabilidade** | Depende de retry, dead-letter queue e idempotência |
+
+### Quando usar Webhook
+
+- **Integração entre sistemas** — notificar um CRM, sistema de e-mail, ou serviço de analytics quando algo acontece.
+- **Pipelines de CI/CD** — disparar builds quando um commit é pushado (ex.: GitHub Webhooks).
+- **Processamento assíncrono** — delegar tarefas a serviços externos sem bloquear a resposta ao cliente.
+
+### Quando *não* usar Webhook
+
+- Quando o consumidor é um navegador (prefira SSE ou WebSocket — navegadores não expõem endpoints HTTP).
+- Quando a entrega precisa ser garantida em tempo real com baixa latência (prefira fila de mensagens como RabbitMQ/Kafka).
+
+### Segurança de Webhooks: HMAC-SHA256
+
+Como qualquer pessoa pode enviar um POST para a URL de callback, é essencial validar que a requisição veio realmente do produtor. O padrão mais usado é **HMAC-SHA256**:
+
+1. O produtor gera um `secret` único por assinatura (ex.: `secrets.token_hex(32)`).
+2. Ao enviar, calcula `HMAC-SHA256(payload, secret)` e inclui no cabeçalho `X-Webhook-Signature: sha256=<hex>`.
+3. O consumidor recalcula o HMAC com o mesmo secret e compara com `hmac.compare_digest()` para evitar timing attacks.
+
+### Recebendo um Webhook no FastAPI
+
+```python
+import hmac
+import hashlib
+from fastapi import FastAPI, Request, HTTPException
+
+app = FastAPI()
+WEBHOOK_SECRET = "segredo_compartilhado"
+
+@app.post("/webhooks/receber")
+async def receber_webhook(request: Request):
+    corpo = await request.body()
+    assinatura_recebida = request.headers.get("X-Webhook-Signature", "")
+
+    # Recalcula o HMAC com o secret compartilhado
+    esperado = "sha256=" + hmac.new(
+        WEBHOOK_SECRET.encode(), corpo, hashlib.sha256
+    ).hexdigest()
+
+    # compare_digest evita timing attacks
+    if not hmac.compare_digest(assinatura_recebida, esperado):
+        raise HTTPException(status_code=401, detail="Assinatura inválida")
+
+    payload = await request.json()
+    print(f"Evento recebido: {payload}")
+    return {"received": True}
+```
+
+### Como funciona no TicketFlow
+
+No TicketFlow, administradores cadastram assinaturas de webhook indicando a URL de destino e os eventos de interesse. Quando um ticket é criado, o sistema dispara automaticamente o webhook para todos os assinantes:
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant API as TicketFlow API
+    participant DB as MongoDB
+    participant WH as WebhookDispatcher
+    actor Ext as Sistema Externo
+
+    Note over Admin,Ext: 1. Cadastro da assinatura
+    Admin->>API: POST /webhook-subscriptions\n{"url":"https://ext.com/hook","events":["ticket.created"]}
+    API->>DB: insert(WebhookSubscription)
+    API-->>Admin: 201 {id, secret} (secret retornado UMA VEZ)
+
+    Note over Admin,Ext: 2. Evento ocorre
+    Admin->>API: POST /tickets {"title":"Bug crítico"}
+    API->>DB: insert(Ticket)
+    API-->>Admin: 201 TicketResponse
+
+    Note over Admin,Ext: 3. Disparo do webhook
+    API->>WH: dispatch("ticket.created", payload)
+    WH->>WH: Busca assinaturas ativas para "ticket.created"
+    WH->>WH: Serializa payload + gera HMAC-SHA256
+    WH->>Ext: POST https://ext.com/hook\nX-Webhook-Signature: sha256=abc...\nX-Event-Type: ticket.created\n{"event":"ticket.created","data":{...}}
+    Ext-->>WH: 200 OK
+```
+
+### Implementação no projeto
+
+O `WebhookDispatcherService` (`app/services/webhook_dispatcher.py`) é responsável por despachar os eventos. Quando o `TicketService` notifica que um ticket foi criado ou alterado, o dispatcher consulta o repositório por assinaturas ativas que cobrem o tipo de evento, serializa o payload com timestamp, calcula a assinatura HMAC-SHA256 e dispara as entregas em paralelo via `asyncio.create_task()`. Falhas na entrega são logadas mas não bloqueiam o fluxo principal — em produção, recomenda-se substituir por uma fila de mensagens com retry e dead-letter queue.
+
+### Comparação final — quatro paradigmas
+
+| Aspecto | REST | SSE | WebSocket | Webhook |
+|---------|------|-----|-----------|---------|
+| **Direção** | Cliente → Servidor | Servidor → Cliente | Bidirecional | Servidor → Servidor |
+| **Conexão** | Curta (req/res) | Longa (stream) | Longa (persistente) | Curta (POST) |
+| **Protocolo** | HTTP | HTTP | `ws://` / `wss://` | HTTP |
+| **Latência** | Moderada | Baixa | Muito baixa | Variável |
+| **Caso de uso** | CRUD, APIs | Dashboards, notificações | Chat, jogos, colaboração | Integrações entre sistemas |
+
+### 🎯 Quiz 8
+
+> Qual das opções descreve corretamente a diferença entre SSE e Webhook?
+>
+> a) Ambos são bidirecionais  
+> b) SSE envia dados ao navegador via stream HTTP; Webhook envia HTTP POST a servidores externos  
+> c) Webhook usa WebSocket internamente  
+> d) SSE exige que o consumidor exponha um endpoint público
+
+<details><summary>Ver resposta</summary>
+
+**b)** SSE é um stream HTTP unidirecional do servidor para o navegador (via `EventSource`). Webhook é um POST HTTP do sistema produtor para uma URL de callback de um sistema externo. SSE é voltado para clientes web; Webhook é voltado para integração entre servidores.
+
+</details>
+
 ---
 
 ## 📚 Para continuar explorando
@@ -709,6 +1075,8 @@ ws.onclose   = ()    => console.log("Conexão encerrada");
 - [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
 - [Beanie — ODM assíncrono para MongoDB](https://beanie-odm.dev)
 - [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+- [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
+- [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
 - [REST API Design Best Practices](https://restfulapi.net/)
 ---
 
