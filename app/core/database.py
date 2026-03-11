@@ -10,7 +10,7 @@ serão mapeadas para coleções.
 """
 
 from beanie import init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from app.core.config import settings
 from app.models.ticket import Ticket
@@ -21,7 +21,7 @@ from app.models.webhook_subscription import WebhookSubscription
 
 async def init_db() -> None:
     """Inicializa o cliente Motor e registra os documentos Beanie."""
-    client: AsyncIOMotorClient = AsyncIOMotorClient(settings.mongodb_url)
+    client: AsyncMongoClient = AsyncMongoClient(settings.mongodb_url)
     database = client[settings.mongodb_db_name]
     await init_beanie(
         database=database,
