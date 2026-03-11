@@ -92,7 +92,7 @@ Também é comum usar `PATCH` para atualizações parciais (apenas alguns campos
 ### Instalação
 
 ```python
-# opcional: Criar ambiente virtual (.venv/venv)
+python3 -m venv .venv && source .venv/bin/activate
 pip install fastapi[standard]
 ```
 
