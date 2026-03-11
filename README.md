@@ -219,6 +219,7 @@ erDiagram
 ## Fluxo de Comunicação
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'arial'}}}%%
 sequenceDiagram
     actor Cliente
     participant API as FastAPI
@@ -227,7 +228,7 @@ sequenceDiagram
     participant WS as WSManager
     actor Externo as Sistema Externo
 
-    rect rgb(200, 230, 255)
+    rect rgb(173, 216, 230)
         note over Cliente,WS: Criação de Ticket (REST)
         Cliente->>API: POST /tickets
         API->>DB: insert(Ticket)
@@ -235,14 +236,14 @@ sequenceDiagram
         API-->>Cliente: 201 TicketResponse
     end
 
-    rect rgb(200, 255, 220)
+    rect rgb(144, 238, 144)
         note over Cliente,WS: Painel SSE
         Cliente->>API: GET /stream/tickets?token=...
         API-->>Cliente: text/event-stream (conexão aberta)
         SSE-->>Cliente: event: ticket.created<br/>data: {...}
     end
 
-    rect rgb(255, 230, 200)
+    rect rgb(255, 200, 150)
         note over Cliente,WS: Chat WebSocket
         Cliente->>API: WS /ws/tickets/{id}?token=...
         note right of API: handshake WebSocket
@@ -251,7 +252,7 @@ sequenceDiagram
         WS-->>Cliente: JSON com tipo "chat"
     end
 
-    rect rgb(230, 200, 255)
+    rect rgb(200, 170, 240)
         note over Externo,WS: Webhook
         Externo->>API: POST /webhooks/tickets<br/>X-Webhook-Signature: sha256=...
         API->>API: verify_webhook_signature()
