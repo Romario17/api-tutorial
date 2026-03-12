@@ -447,7 +447,7 @@
       text-align: center; padding: 4rem 2rem; color: var(--text-3);
     }
     .empty-state i { font-size: 3rem; display: block; margin-bottom: 1rem; opacity: .25; }
-    .empty-state p { font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .empty-state p { font-size: 0.9rem; }
 
     /* ── Modal ── */
     .modal-overlay {
@@ -1654,9 +1654,6 @@ function renderTicketTable() {
       <div class="empty-state">
         <i class="fa-solid fa-ticket-simple"></i>
         <p>${allTickets.length ? 'Nenhum ticket com esses filtros.' : 'Nenhum ticket cadastrado.'}</p>
-        <button class="btn-primary btn-sm" onclick="openCreateModal()">
-          <i class="fa-solid fa-plus"></i> Criar Ticket
-        </button>
       </div></td></tr>`;
     return;
   }
@@ -1701,7 +1698,6 @@ async function createTicket() {
       category:    $('modal-category').value,
     })});
     closeCreateModal();
-    notify('created', d.code, 'Ticket criado', `"${d.title}" — ${d.priority} / ${d.category}`);
     await loadTickets();
   } catch (e) { alert('Erro: ' + e.message); }
 }
