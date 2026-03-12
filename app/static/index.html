@@ -1292,11 +1292,24 @@ let notifOpen      = false;
 
 const $ = id => document.getElementById(id);
 
-function ts()  { const d = new Date(); return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' }); }
+const USER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function ts()  { const d = new Date(); return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone: USER_TZ }); }
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
+  return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone: USER_TZ });
+}
+
+/**
+ * Converte um valor de <input type="datetime-local"> (hora local, sem fuso)
+ * ou qualquer Date para uma string ISO 8601 em UTC.
+ * Use esta função ao incluir datetimes no corpo de requisições ao backend.
+ *   Ex: due_at: toUTCISO($('due-at-input').value)
+ */
+function toUTCISO(value) {
+  if (!value) return null;
+  return new Date(value).toISOString(); // toISOString() sempre retorna UTC (sufixo Z)
 }
 
 function relTime(date) {

@@ -21,7 +21,8 @@ from app.models.webhook_subscription import WebhookSubscription
 
 async def init_db() -> None:
     """Inicializa o cliente Motor e registra os documentos Beanie."""
-    client: AsyncMongoClient = AsyncMongoClient(settings.mongodb_url)
+    client: AsyncMongoClient = AsyncMongoClient(settings.mongodb_url,
+                                                tz_aware=True)
     database = client[settings.mongodb_db_name]
     await init_beanie(
         database=database,
