@@ -9,7 +9,7 @@ O **TicketFlow API Demo** é um projeto pedagógico que demonstra, em um único 
 | Protocolo | Endpoint | Direção | Caso de uso |
 |-----------|----------|---------|-------------|
 | REST (HTTP) | `/tickets`, `/auth`, `/webhooks` | Bidirecional por requisição | Operações CRUD, autenticação |
-| SSE | `/stream/tickets` | Servidor → Cliente | Painel de monitoramento em tempo real |
+| SSE | `/stream/tickets` | Servidor → Cliente | Painel de monitoramento em tempo real (mesmo transporte usado pelo MCP) |
 | WebSocket | `/ws/tickets/{id}` | Bidirecional e persistente | Chat ao vivo por ticket |
 | Webhook | `/webhooks/tickets` | Sistema externo → API | Integração com sistemas de terceiros |
 
@@ -281,6 +281,7 @@ sequenceDiagram
 
 - **Painéis de monitoramento** que precisam refletir mudanças em tempo real.
 - **Feeds de notificações** onde o cliente apenas *recebe* informação.
+- **Servidores MCP** que precisam enviar respostas e notificações a assistentes de IA via stream HTTP.
 - Cenários em que **simplicidade** é prioridade, pois SSE funciona sobre HTTP comum (sem upgrade de protocolo) e atravessa proxies e firewalls com facilidade.
 
 ### Quando *não* usar SSE
@@ -314,6 +315,27 @@ sequenceDiagram
 ### Implementação no projeto
 
 O `SSEManager` (`app/core/sse.py`) utiliza uma **fila `asyncio.Queue` por cliente** para desacoplar os produtores de eventos (serviços de domínio) dos consumidores (streams SSE). Quando um ticket é criado ou alterado, o `TicketService` chama `sse_manager.broadcast(event_type, data)`, que coloca a mensagem formatada em todas as filas ativas. Cada cliente conectado consome sua fila via um **gerador assíncrono** que também emite um comentário keep-alive a cada 15 segundos para evitar que proxies intermediários encerrem a conexão por inatividade.
+
+### SSE no contexto de MCP (Model Context Protocol)
+
+O **Model Context Protocol (MCP)** é um protocolo aberto que padroniza a comunicação entre assistentes de IA (como o GitHub Copilot e o Claude) e **servidores de ferramentas externas** — bancos de dados, APIs, sistemas de arquivos, etc. O MCP utiliza SSE como um de seus mecanismos de transporte.
+
+No transporte **Streamable HTTP** do MCP:
+
+1. O **cliente MCP** (assistente de IA) envia requisições via `HTTP POST` para o servidor MCP.
+2. O **servidor MCP** responde via **SSE**, enviando resultados e notificações pelo stream `text/event-stream`.
+3. O servidor pode manter a conexão SSE aberta para enviar **notificações assíncronas** (ex.: progresso de tarefas longas).
+
+O padrão SSE implementado no TicketFlow — produtor emite eventos, consumidor recebe via stream HTTP — é o mesmo padrão usado pelo MCP. A diferença é o contexto: no TicketFlow o consumidor é um navegador atualizando um painel; no MCP o consumidor é um assistente de IA invocando ferramentas externas.
+
+| Aspecto | TicketFlow (SSE) | MCP (SSE) |
+|---------|------------------|-----------|
+| **Produtor** | `SSEManager` (eventos de tickets) | Servidor MCP (resultados de ferramentas) |
+| **Consumidor** | Navegador (`EventSource`) | Cliente MCP (assistente de IA) |
+| **Formato dos dados** | `event: ticket.created\ndata: {...}` | `event: message\ndata: {"jsonrpc":"2.0",...}` |
+| **Caso de uso** | Painel de monitoramento em tempo real | Integração de IA com ferramentas externas |
+
+> 💡 Ao aprender SSE neste projeto, você já está aprendendo o transporte que viabiliza a comunicação entre modelos de IA e o mundo externo via MCP. Um servidor MCP em Python com FastAPI utiliza `StreamingResponse` com `text/event-stream` — exatamente como o endpoint `/stream/tickets` do TicketFlow.
 
 ---
 
@@ -410,7 +432,7 @@ O `WebSocketManager` (`app/core/websocket_manager.py`) agrupa conexões WebSocke
 | Reconexão | Automática (`EventSource`) | Manual |
 | Overhead | Baixo (HTTP) | Muito baixo (frames binários) |
 | Proxy/firewall | Transparente | Pode exigir configuração |
-| Caso de uso típico | Dashboards, notificações | Chat, jogos, colaboração |
+| Caso de uso típico | Dashboards, notificações, MCP | Chat, jogos, colaboração |
 
 ---
 
@@ -523,3 +545,5 @@ O `WebhookDispatcherService` (`app/services/webhook_dispatcher.py`) é responsá
 - [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
 - [MDN — WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
 - [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
+- [Model Context Protocol — Especificação](https://modelcontextprotocol.io)
+- [MCP — Transporte SSE](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)
