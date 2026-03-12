@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24h — ideal para tutorial
 
+    # Timezone usado nas datas dos eventos de webhook de saída.
+    # Aceita qualquer nome IANA (ex: America/Sao_Paulo, Europe/Lisbon, UTC).
+    timezone: str = "UTC"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
