@@ -742,44 +742,6 @@ ws.onclose   = ()    => console.log("Conexão encerrada");
 
 </details>
 
-### Como funciona no TicketFlow
-
-No TicketFlow, cada ticket possui sua própria "sala" WebSocket. Quando dois usuários se conectam ao mesmo ticket, ambos passam a receber em tempo real todas as mensagens trocadas naquele ticket:
-
-```mermaid
-sequenceDiagram
-    actor Alice as Cliente (Alice)
-    participant API as FastAPI
-    participant WS as WebSocketManager
-    actor Bob as Cliente (Bob)
-
-    Alice->>API: WS /ws/tickets/abc?token=<jwt_alice>
-    API->>API: Valida JWT
-    API->>WS: connect("abc", ws_alice)
-    WS-->>Bob: {"type":"user_joined","author":"alice"}
-
-    Bob->>API: WS /ws/tickets/abc?token=<jwt_bob>
-    API->>WS: connect("abc", ws_bob)
-    WS-->>Alice: {"type":"user_joined","author":"bob"}
-
-    Alice->>API: "Meu computador não liga"
-    API->>WS: broadcast_to_ticket("abc", msg)
-    WS-->>Alice: {"type":"message","author":"alice","message":"Meu computador não liga"}
-    WS-->>Bob: {"type":"message","author":"alice","message":"Meu computador não liga"}
-
-    Bob->>API: "Verifique o cabo de energia"
-    API->>WS: broadcast_to_ticket("abc", msg)
-    WS-->>Alice: {"type":"message","author":"bob","message":"Verifique o cabo de energia"}
-    WS-->>Bob: {"type":"message","author":"bob","message":"Verifique o cabo de energia"}
-
-    Alice--xAPI: WebSocketDisconnect
-    WS-->>Bob: {"type":"user_left","author":"alice"}
-```
-
-### Implementação no projeto
-
-O `WebSocketManager` (`app/core/websocket_manager.py`) agrupa conexões WebSocket ativas por `ticket_id` usando um `defaultdict(list)`. Quando uma mensagem é enviada por um participante, o manager itera sobre todas as conexões do ticket e envia o JSON via `send_text()`. Conexões "mortas" (que falharam ao enviar) são removidas silenciosamente, garantindo robustez. A autenticação ocorre via query parameter `token` porque o protocolo WebSocket no navegador não suporta envio de cabeçalhos HTTP personalizados durante o handshake (limitação da API `WebSocket` do JavaScript).
-
 ---
 
 ## Parte 8 — Server-Sent Events (SSE)
@@ -866,113 +828,6 @@ source.onerror = () => console.log("Conexão perdida — reconectando automatica
 // O EventSource reconecta automaticamente!
 ```
 
-### Como funciona no TicketFlow
-
-No TicketFlow, o SSE é usado para alimentar o painel de monitoramento de tickets em tempo real. Quando qualquer ticket é criado ou atualizado, todos os clientes conectados recebem o evento instantaneamente:
-
-```mermaid
-sequenceDiagram
-    actor Cliente
-    participant API as FastAPI
-    participant SSE as SSEManager
-
-    Cliente->>API: GET /stream/tickets?token=<jwt>
-    activate API
-    API->>API: Valida JWT (query param)
-    API-->>Cliente: 200 Content-Type: text/event-stream
-
-    loop Conexão aberta
-        SSE-->>Cliente: event: ticket.created\ndata: {"id":"...","title":"..."}\n\n
-        SSE-->>Cliente: event: ticket.updated\ndata: {"id":"...","status":"in_progress"}\n\n
-        Note right of SSE: Keep-alive a cada 15s\n(": keep-alive\n\n")
-    end
-
-    Cliente--xAPI: Desconexão (navegador fecha)
-    deactivate API
-```
-
-### Implementação no projeto
-
-O `SSEManager` (`app/core/sse.py`) utiliza uma **fila `asyncio.Queue` por cliente** para desacoplar os produtores de eventos (serviços de domínio) dos consumidores (streams SSE). Quando um ticket é criado ou alterado, o `TicketService` chama `sse_manager.broadcast(event_type, data)`, que coloca a mensagem formatada em todas as filas ativas. Cada cliente conectado consome sua fila via um **gerador assíncrono** que também emite um comentário keep-alive a cada 15 segundos para evitar que proxies intermediários encerrem a conexão por inatividade.
-
-**`app/core/sse.py` — gerenciador de eventos SSE:**
-
-```python
-import asyncio
-import json
-from collections.abc import AsyncGenerator
-
-
-class SSEManager:
-    """Gerencia filas de eventos SSE para múltiplos clientes conectados."""
-
-    def __init__(self) -> None:
-        self._queues: list[asyncio.Queue[str]] = []
-
-    async def broadcast(self, event_type: str, data: dict) -> None:
-        """Envia um evento SSE formatado para todas as filas ativas."""
-        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-        for q in list(self._queues):
-            await q.put(message)
-
-    async def subscribe(self) -> AsyncGenerator[str, None]:
-        """
-        Gerador assíncrono que produz mensagens SSE para um cliente.
-
-        Envia um comentário keep-alive a cada 15 segundos de inatividade
-        para evitar timeout de proxies intermediários.
-        """
-        q: asyncio.Queue[str] = asyncio.Queue()
-        self._queues.append(q)
-        try:
-            while True:
-                try:
-                    message = await asyncio.wait_for(q.get(), timeout=15.0)
-                    yield message
-                except TimeoutError:
-                    yield ": keep-alive\n\n"
-        finally:
-            self._queues.remove(q)
-
-
-sse_manager = SSEManager()
-```
-
-**`app/routers/stream.py` — endpoint SSE:**
-
-```python
-from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse
-
-from app.core.sse import sse_manager
-
-router = APIRouter(prefix="/stream", tags=["Stream SSE"])
-
-
-@router.get("/tickets")
-async def stream_tickets(token: str = Query(...)) -> StreamingResponse:
-    # token JWT validado antes de abrir o stream
-    return StreamingResponse(
-        sse_manager.subscribe(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-```
-
-**Emitindo eventos a partir do serviço de domínio:**
-
-```python
-# Em qualquer serviço (ex.: ticket_service.py)
-async def create_ticket(self, ...) -> TicketResponse:
-    ticket = await self._ticket_repo.create(...)
-    response = TicketResponse(...)
-    # Notifica todos os clientes SSE conectados
-    await sse_manager.broadcast("ticket.created", response.model_dump(mode="json"))
-    return response
-```
-
-A separação entre `SSEManager` (fila) e o endpoint (gerador) garante que múltiplos clientes possam se conectar simultaneamente, cada um com sua própria fila independente, sem bloquear uns aos outros.
-
 ### SSE no contexto de MCP (Model Context Protocol)
 
 O **Model Context Protocol (MCP)** é um protocolo aberto que padroniza a comunicação entre assistentes de IA (como o GitHub Copilot e o Claude) e **servidores de ferramentas externas** — bancos de dados, APIs, sistemas de arquivos, etc. O MCP utiliza SSE como um de seus mecanismos de transporte, aproveitando exatamente as mesmas características que vimos nesta seção.
@@ -1012,19 +867,6 @@ MCP Client (IA)                         MCP Server (Ferramentas)
 | **Reconexão automática** | Sessões MCP sobrevivem a quedas temporárias de rede |
 | **Streaming nativo** | Permite respostas incrementais (ex.: resultados parciais de queries longas) |
 | **Simplicidade** | Mais fácil de implementar e depurar do que WebSocket para cenários requisição-resposta |
-
-#### Relação com o TicketFlow
-
-O padrão SSE que implementamos no TicketFlow — produtor emite eventos, consumidor recebe via stream HTTP — é **o mesmo padrão usado pelo MCP**. A principal diferença é o contexto:
-
-| Aspecto | TicketFlow (SSE) | MCP (SSE) |
-|---------|------------------|-----------|
-| **Produtor** | `SSEManager` (eventos de tickets) | Servidor MCP (resultados de ferramentas) |
-| **Consumidor** | Navegador (`EventSource`) | Cliente MCP (assistente de IA) |
-| **Formato dos dados** | `event: ticket.created\ndata: {...}` | `event: message\ndata: {"jsonrpc":"2.0",...}` |
-| **Caso de uso** | Painel de monitoramento em tempo real | Integração de IA com ferramentas externas |
-
-> 💡 **Conexão prática**: ao aprender SSE neste tutorial, você já está aprendendo o transporte que viabiliza a comunicação entre modelos de IA e o mundo externo via MCP. Um servidor MCP em Python com FastAPI utiliza `StreamingResponse` com `text/event-stream` — exatamente como o endpoint `/stream/tickets` do TicketFlow.
 
 ### Diferença entre SSE e WebSocket
 
@@ -1136,40 +978,6 @@ async def receber_webhook(request: Request):
     print(f"Evento recebido: {payload}")
     return {"received": True}
 ```
-
-### Como funciona no TicketFlow
-
-No TicketFlow, administradores cadastram assinaturas de webhook indicando a URL de destino e os eventos de interesse. Quando um ticket é criado, o sistema dispara automaticamente o webhook para todos os assinantes:
-
-```mermaid
-sequenceDiagram
-    actor Admin
-    participant API as TicketFlow API
-    participant DB as MongoDB
-    participant WH as WebhookDispatcher
-    actor Ext as Sistema Externo
-
-    Note over Admin,Ext: 1. Cadastro da assinatura
-    Admin->>API: POST /webhook-subscriptions\n{"url":"https://ext.com/hook","events":["ticket.created"]}
-    API->>DB: insert(WebhookSubscription)
-    API-->>Admin: 201 {id, secret} (secret retornado UMA VEZ)
-
-    Note over Admin,Ext: 2. Evento ocorre
-    Admin->>API: POST /tickets {"title":"Bug crítico"}
-    API->>DB: insert(Ticket)
-    API-->>Admin: 201 TicketResponse
-
-    Note over Admin,Ext: 3. Disparo do webhook
-    API->>WH: dispatch("ticket.created", payload)
-    WH->>WH: Busca assinaturas ativas para "ticket.created"
-    WH->>WH: Serializa payload + gera HMAC-SHA256
-    WH->>Ext: POST https://ext.com/hook\nX-Webhook-Signature: sha256=abc...\nX-Event-Type: ticket.created\n{"event":"ticket.created","data":{...}}
-    Ext-->>WH: 200 OK
-```
-
-### Implementação no projeto
-
-O `WebhookDispatcherService` (`app/services/webhook_dispatcher.py`) é responsável por despachar os eventos. Quando o `TicketService` notifica que um ticket foi criado ou alterado, o dispatcher consulta o repositório por assinaturas ativas que cobrem o tipo de evento, serializa o payload com timestamp, calcula a assinatura HMAC-SHA256 e dispara as entregas em paralelo via `asyncio.create_task()`. Falhas na entrega são logadas mas não bloqueiam o fluxo principal — em produção, recomenda-se substituir por uma fila de mensagens com retry e dead-letter queue.
 
 ### Comparação final — quatro paradigmas
 
