@@ -18,8 +18,6 @@ O **TicketFlow API Demo** é um projeto pedagógico que demonstra, em um único 
 ## Pré-requisitos
 
 - Python 3.11+
-- MongoDB (local ou Atlas)
-
 ---
 
 ## Instalação
