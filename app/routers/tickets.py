@@ -141,4 +141,3 @@ async def delete_ticket(
 ) -> None:
     """Exclui permanentemente um ticket e todas as suas mensagens. Requer papel manager."""
     await service.delete_ticket(ticket_id)
-    return await service.assign_ticket(ticket_id, body.agent_id)
