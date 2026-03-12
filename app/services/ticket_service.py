@@ -22,7 +22,7 @@ from app.core.exceptions import NotFoundError
 from app.core.sse import SSEManager
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
-from app.repositories.protocols import TicketRepository, UserRepository
+from app.repositories.protocols import MessageRepository, TicketRepository, UserRepository
 from app.schemas.ticket import TicketResponse, UserRef
 
 # Conjunto global para manter referências fortes a tasks fire-and-forget,
@@ -38,10 +38,12 @@ class TicketService:
         ticket_repo: TicketRepository,
         user_repo: UserRepository,
         sse_manager: SSEManager,
+        message_repo: MessageRepository | None = None,
     ) -> None:
         self._ticket_repo = ticket_repo
         self._user_repo = user_repo
         self._sse = sse_manager
+        self._message_repo = message_repo
         self._dispatch_webhook: Any = None
 
     def set_webhook_dispatcher(self, dispatcher: Any) -> None:
@@ -284,6 +286,51 @@ class TicketService:
             extra={"changed_fields": {"status": {"from": old_status, "to": new_status}}},
         )
         return response
+
+    async def cancel_ticket(self, ticket_id: str) -> TicketResponse:
+        """
+        Cancela um ticket, definindo seu status como 'cancelled'.
+
+        Raises:
+            NotFoundError: se o ticket não existir.
+        """
+        ticket = await self._ticket_repo.find_by_id(ticket_id, fetch_links=True)
+        if not ticket:
+            raise NotFoundError("Ticket", ticket_id)
+
+        old_status = ticket.status
+        ticket.status = TicketStatus.cancelled
+        ticket.updated_at = datetime.now(UTC)
+        await self._ticket_repo.save(ticket)
+
+        response = self._ticket_to_response(ticket)
+        await self._notify(
+            TicketEvents.CANCELLED,
+            response,
+            extra={"changed_fields": {"status": {"from": old_status, "to": TicketStatus.cancelled}}},
+        )
+        return response
+
+    async def delete_ticket(self, ticket_id: str) -> None:
+        """
+        Exclui um ticket e todas as suas mensagens.
+
+        Raises:
+            NotFoundError: se o ticket não existir.
+        """
+        ticket = await self._ticket_repo.find_by_id(ticket_id, fetch_links=True)
+        if not ticket:
+            raise NotFoundError("Ticket", ticket_id)
+
+        response = self._ticket_to_response(ticket)
+
+        if self._message_repo:
+            await self._message_repo.delete_by_ticket(ticket_id)
+        await self._ticket_repo.delete(ticket)
+
+        payload = response.model_dump(mode="json")
+        await self._sse.broadcast(TicketEvents.DELETED, payload)
+        self._fire_webhook(TicketEvents.DELETED, payload)
 
     async def assign_ticket(self, ticket_id: str, agent_id: str) -> TicketResponse:
         """

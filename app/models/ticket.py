@@ -22,6 +22,7 @@ class TicketStatus(StrEnum):
     in_progress = "in_progress"
     resolved = "resolved"
     closed = "closed"
+    cancelled = "cancelled"
 
 
 class TicketPriority(StrEnum):

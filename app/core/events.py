@@ -15,6 +15,8 @@ class TicketEvents:
     UPDATED = "ticket.updated"
     STATUS_CHANGED = "ticket.status_changed"
     ASSIGNED = "ticket.assigned"
+    CANCELLED = "ticket.cancelled"
+    DELETED = "ticket.deleted"
 
 
 class MessageEvents:

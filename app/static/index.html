@@ -315,6 +315,7 @@
     .badge-resolved    { background:#d1fae5;color:#065f46; }
     .badge-closed      { background:#f1f5f9;color:#64748b; }
     .badge-triaged     { background:#ede9fe;color:#6d28d9; }
+    .badge-cancelled   { background:#fee2e2;color:#991b1b; }
 
     /* ── Priority dot ── */
     .prio-dot { width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0; }
@@ -1078,6 +1079,16 @@
             <button class="btn-secondary btn-sm edit-only" onclick="cancelEdit()">
               <i class="fa-solid fa-xmark"></i> Cancelar
             </button>
+            <button class="btn-secondary btn-sm view-only" id="btn-cancel-ticket"
+              style="color:#d97706;border-color:#d97706"
+              onclick="cancelTicket()" title="Cancelar este ticket">
+              <i class="fa-solid fa-ban"></i> Cancelar Ticket
+            </button>
+            <button class="btn-secondary btn-sm view-only" id="btn-delete-ticket"
+              style="color:#dc2626;border-color:#dc2626"
+              onclick="deleteTicket()" title="Excluir permanentemente este ticket e suas mensagens">
+              <i class="fa-solid fa-trash"></i> Excluir
+            </button>
           </div>
         </div>
 
@@ -1102,6 +1113,7 @@
                 <option value="in_progress">in_progress</option>
                 <option value="resolved">resolved</option>
                 <option value="closed">closed</option>
+                <option value="cancelled">cancelled</option>
               </select>
             </div>
           </div>
@@ -1616,6 +1628,26 @@ function startSSE() {
     if ($('view-list').style.display !== 'none') loadTickets();
   });
 
+  sseSource.addEventListener('ticket.cancelled', e => {
+    const t = safeParseJSON(e.data);
+    const code = t?.code || '';
+    notify('updated', code, 'Ticket cancelado', `"${t?.title||''}" foi cancelado`);
+    if (currentTicketId && t?.id === currentTicketId) loadDetail(currentTicketId, true);
+    if ($('view-list').style.display !== 'none') loadTickets();
+  });
+
+  sseSource.addEventListener('ticket.deleted', e => {
+    const t = safeParseJSON(e.data);
+    const code = t?.code || '';
+    notify('updated', code, 'Ticket excluído', `"${t?.title||''}" foi removido`);
+    if (currentTicketId && t?.id === currentTicketId) {
+      currentTicketId   = null;
+      currentTicketData = null;
+      navigate('list');
+    }
+    if ($('view-list').style.display !== 'none') loadTickets();
+  });
+
   sseSource.onerror = () => setSseStatus(false);
   setSseStatus(true);
 }
@@ -1756,6 +1788,11 @@ function renderDetail(t) {
   // Acento de prioridade na borda esquerda do card
   $('detail-card').dataset.priority = t.priority;
 
+  // Mostra/oculta botão de cancelar conforme status
+  const alreadyFinal = ['cancelled', 'closed'].includes(t.status);
+  const btnCancel = $('btn-cancel-ticket');
+  if (btnCancel) btnCancel.style.display = alreadyFinal ? 'none' : '';
+
   // Sai do modo edição se estava
   cancelEdit();
 }
@@ -1805,6 +1842,28 @@ async function saveEdit() {
     await loadDetail(currentTicketId, true);
     $('detail-card').classList.remove('editing');
   } catch (e) { alert('Erro ao salvar: ' + e.message); }
+}
+
+// ── Cancelar / Excluir Ticket ─────────────────────────────────
+
+async function cancelTicket() {
+  if (!currentTicketId) return;
+  if (!confirm('Confirma o cancelamento deste ticket?')) return;
+  try {
+    await apiFetch(`/tickets/${currentTicketId}/cancel`, { method: 'PATCH' });
+    await loadDetail(currentTicketId, true);
+  } catch (e) { alert('Erro ao cancelar: ' + e.message); }
+}
+
+async function deleteTicket() {
+  if (!currentTicketId) return;
+  if (!confirm('Excluir permanentemente este ticket e todas as suas mensagens? Esta ação não pode ser desfeita.')) return;
+  try {
+    await apiFetch(`/tickets/${currentTicketId}`, { method: 'DELETE' });
+    currentTicketId   = null;
+    currentTicketData = null;
+    navigate('list');
+  } catch (e) { alert('Erro ao excluir: ' + e.message); }
 }
 
 // ── Assign ────────────────────────────────────────────────────

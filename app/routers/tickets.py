@@ -9,6 +9,8 @@ GET    /tickets/{id}         — detalha um ticket
 PATCH  /tickets/{id}         — atualiza campos do ticket
 PATCH  /tickets/{id}/status  — atualiza status (agente ou manager)
 PATCH  /tickets/{id}/assign  — atribui agente (manager)
+PATCH  /tickets/{id}/cancel  — cancela o ticket (agente ou manager)
+DELETE /tickets/{id}         — exclui ticket e mensagens (manager)
 
 Decisão de projeto: thin controller — delega toda lógica ao TicketService
 injetado via Depends. Usa Annotated para DI moderna.
@@ -113,4 +115,30 @@ async def assign_ticket(
     service: TicketServiceDep,
 ) -> TicketResponse:
     """Atribui um agente (por ID) a um ticket. Requer papel manager."""
+    return await service.assign_ticket(ticket_id, body.agent_id)
+
+
+@router.patch(
+    "/{ticket_id}/cancel",
+    dependencies=[Depends(require_roles(UserRole.agent, UserRole.manager))],
+)
+async def cancel_ticket(
+    ticket_id: str,
+    service: TicketServiceDep,
+) -> TicketResponse:
+    """Cancela um ticket (define status como cancelled). Requer papel agent ou manager."""
+    return await service.cancel_ticket(ticket_id)
+
+
+@router.delete(
+    "/{ticket_id}",
+    status_code=204,
+    dependencies=[Depends(require_roles(UserRole.manager))],
+)
+async def delete_ticket(
+    ticket_id: str,
+    service: TicketServiceDep,
+) -> None:
+    """Exclui permanentemente um ticket e todas as suas mensagens. Requer papel manager."""
+    await service.delete_ticket(ticket_id)
     return await service.assign_ticket(ticket_id, body.agent_id)

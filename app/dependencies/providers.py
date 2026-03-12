@@ -87,10 +87,16 @@ def get_auth_service(
 def get_ticket_service(
     ticket_repo: TicketRepository = Depends(get_ticket_repository),
     user_repo: UserRepository = Depends(get_user_repository),
+    message_repo: MessageRepository = Depends(get_message_repository),
     sse: SSEManager = Depends(get_sse_manager),
     webhook_dispatcher: WebhookDispatcherService = Depends(get_webhook_dispatcher_service),
 ) -> TicketService:
-    service = TicketService(ticket_repo=ticket_repo, user_repo=user_repo, sse_manager=sse)
+    service = TicketService(
+        ticket_repo=ticket_repo,
+        user_repo=user_repo,
+        sse_manager=sse,
+        message_repo=message_repo,
+    )
     service.set_webhook_dispatcher(webhook_dispatcher)
     return service
 

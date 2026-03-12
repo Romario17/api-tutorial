@@ -24,3 +24,8 @@ class BeanieMessageRepository:
             .sort("+created_at")
             .to_list()
         )
+
+    async def delete_by_ticket(self, ticket_id: str) -> None:
+        await TicketMessage.find(
+            TicketMessage.ticket_id == PydanticObjectId(ticket_id)
+        ).delete()

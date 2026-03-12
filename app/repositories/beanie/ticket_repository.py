@@ -28,3 +28,6 @@ class BeanieTicketRepository:
     async def save(self, ticket: Ticket) -> Ticket:
         await ticket.save()
         return ticket
+
+    async def delete(self, ticket: Ticket) -> None:
+        await ticket.delete()

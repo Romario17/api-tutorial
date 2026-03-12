@@ -48,6 +48,8 @@ class TicketRepository(Protocol):
 
     async def save(self, ticket: Ticket) -> Ticket: ...
 
+    async def delete(self, ticket: Ticket) -> None: ...
+
 
 class MessageRepository(Protocol):
     """Contrato de acesso a dados de mensagens de ticket."""
@@ -55,6 +57,8 @@ class MessageRepository(Protocol):
     async def create(self, message: TicketMessage) -> TicketMessage: ...
 
     async def find_by_ticket(self, ticket_id: str) -> list[TicketMessage]: ...
+
+    async def delete_by_ticket(self, ticket_id: str) -> None: ...
 
 
 class WebhookSubscriptionRepository(Protocol):
