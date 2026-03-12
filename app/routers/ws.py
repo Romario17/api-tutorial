@@ -17,23 +17,22 @@ Dependências (managers e repositórios) são resolvidas via DI.
 
 from typing import Annotated
 
-from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from app.core.security import decode_access_token
 from app.core.websocket_manager import WebSocketManager
 from app.dependencies.providers import (
-    get_message_repository,
+    get_message_service,
     get_user_repository,
     get_ws_manager,
 )
-from app.models.ticket_message import TicketMessage
-from app.repositories.protocols import MessageRepository, UserRepository
+from app.repositories.protocols import UserRepository
+from app.services.message_service import MessageService
 
 router = APIRouter(tags=["WebSocket"])
 
 UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
-MessageRepoDep = Annotated[MessageRepository, Depends(get_message_repository)]
+MessageServiceDep = Annotated[MessageService, Depends(get_message_service)]
 WSManagerDep = Annotated[WebSocketManager, Depends(get_ws_manager)]
 
 
@@ -44,7 +43,7 @@ async def websocket_ticket(
     token: str = Query(..., description="Token JWT de autenticação"),
     *,
     user_repo: UserRepoDep,
-    message_repo: MessageRepoDep,
+    message_service: MessageServiceDep,
     ws: WSManagerDep,
 ) -> None:
     """
@@ -71,21 +70,7 @@ async def websocket_ticket(
     try:
         while True:
             data = await websocket.receive_text()
-            msg = TicketMessage(
-                ticket_id=PydanticObjectId(ticket_id),
-                author_id=user.id,  # type: ignore[arg-type]
-                message=data,
-            )
-            await message_repo.create(msg)
-            await ws.broadcast_to_ticket(
-                ticket_id,
-                {
-                    "type": "message",
-                    "author": username,
-                    "author_id": str(user.id),
-                    "message": data,
-                },
-            )
+            await message_service.create_message(ticket_id, data, user)
     except WebSocketDisconnect:
         ws.disconnect(ticket_id, websocket)
         await ws.broadcast_to_ticket(
