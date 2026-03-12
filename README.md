@@ -8,10 +8,10 @@ O **TicketFlow API Demo** é um projeto pedagógico que demonstra, em um único 
 
 | Protocolo | Endpoint | Direção | Caso de uso |
 |-----------|----------|---------|-------------|
-| REST (HTTP) | `/tickets`, `/auth`, `/webhooks` | Bidirecional por requisição | Operações CRUD, autenticação |
+| REST (HTTP) | `/tickets`, `/auth`, `/webhook-subscriptions` | Bidirecional por requisição | Operações CRUD, autenticação |
 | SSE | `/stream/tickets` | Servidor → Cliente | Painel de monitoramento em tempo real (mesmo transporte usado pelo MCP) |
 | WebSocket | `/ws/tickets/{id}` | Bidirecional e persistente | Chat ao vivo por ticket |
-| Webhook | `/webhooks/tickets` | Sistema externo → API | Integração com sistemas de terceiros |
+| Webhook | `/webhook-subscriptions` | API → Sistema externo | Notificações de saída para sistemas integrados |
 
 ---
 
@@ -50,8 +50,9 @@ cp .env.template .env
 MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=ticketflow
 SECRET_KEY=CHANGE_THIS_SECRET_IN_PRODUCTION
-WEBHOOK_SECRET=CHANGE_THIS_WEBHOOK_SECRET
+ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+WEBHOOK_SECRET=CHANGE_THIS_WEBHOOK_SECRET
 ```
 
 ---
@@ -75,6 +76,8 @@ Acesse o cliente de demonstração em: **http://localhost:8000**
 
 Documentação interativa (Swagger UI): **http://localhost:8000/docs**
 
+Interface de e-mails (MailHog): **http://localhost:8025**
+
 ### Testes
 
 Os testes unitários utilizam `unittest` e validam os componentes de comunicação em tempo real (SSE, WebSocket e Webhook) de forma isolada, sem dependência de banco de dados ou servidor:
@@ -93,6 +96,9 @@ app/
 ├── core/
 │   ├── config.py              # Configurações (pydantic-settings)
 │   ├── database.py            # Inicialização Beanie/Motor
+│   ├── events.py              # Constantes de tipos de evento de domínio
+│   ├── exception_handlers.py  # Mapeamento de exceções de domínio → HTTP
+│   ├── exceptions.py          # Exceções de domínio (desacopladas de HTTP)
 │   ├── security.py            # JWT e bcrypt
 │   ├── sse.py                 # Gerenciador SSE (asyncio.Queue)
 │   └── websocket_manager.py   # Gerenciador WebSocket por ticket
@@ -100,28 +106,44 @@ app/
 │   ├── user.py                # Documento Beanie: User
 │   ├── ticket.py              # Documento Beanie: Ticket + Enums
 │   ├── ticket_message.py      # Documento Beanie: TicketMessage
-│   └── webhook_event.py       # Documento Beanie: WebhookEventLog
+│   └── webhook_subscription.py # Documento Beanie: WebhookSubscription
 ├── schemas/
 │   ├── auth.py                # Schemas Pydantic: Auth
 │   ├── ticket.py              # Schemas Pydantic: Ticket
 │   ├── ticket_message.py      # Schemas Pydantic: Message
-│   └── webhook.py             # Schemas Pydantic: Webhook
+│   └── webhook_subscription.py # Schemas Pydantic: WebhookSubscription
 ├── routers/
 │   ├── auth.py                # POST /auth/register, /auth/login, GET /auth/me
 │   ├── tickets.py             # CRUD de tickets
 │   ├── messages.py            # Mensagens por ticket
 │   ├── stream.py              # GET /stream/tickets (SSE)
 │   ├── ws.py                  # WS /ws/tickets/{id}
-│   └── webhooks.py            # POST /webhooks/tickets
+│   └── webhook_subscriptions.py # CRUD /webhook-subscriptions
+├── repositories/
+│   ├── protocols.py           # Interfaces (typing.Protocol) dos repositórios
+│   └── beanie/
+│       ├── message_repository.py              # Implementação Beanie: MessageRepository
+│       ├── ticket_repository.py               # Implementação Beanie: TicketRepository
+│       ├── user_repository.py                 # Implementação Beanie: UserRepository
+│       └── webhook_subscription_repository.py # Implementação Beanie: WebhookSubscriptionRepository
 ├── dependencies/
-│   └── auth.py                # Dependências FastAPI: get_current_user, require_roles
+│   ├── auth.py                # get_current_user, require_roles
+│   └── providers.py           # Container de injeção de dependência (Depends)
 ├── services/
 │   ├── auth_service.py        # Lógica de autenticação
-│   ├── ticket_service.py      # Lógica de tickets + notificações SSE
-│   ├── webhook_service.py     # Validação HMAC e persistência de eventos
+│   ├── ticket_service.py      # Lógica de tickets + notificações SSE/Webhook
+│   ├── message_service.py     # Lógica de mensagens + notificações WS/Webhook
+│   ├── webhook_dispatcher.py  # Despacho de webhooks de saída (HMAC-SHA256)
+│   ├── webhook_subscription_service.py # CRUD de assinaturas de webhook
 │   └── stream_service.py      # Gerador SSE
 └── static/
     └── index.html             # Cliente HTML/JS de demonstração
+
+services/
+└── email-notifier/            # Microserviço de exemplo: receptor de webhook
+    ├── main.py                # FastAPI: recebe eventos e envia e-mails via SMTP
+    ├── requirements.txt
+    └── Dockerfile
 ```
 
 ---
@@ -160,11 +182,14 @@ app/
 | SSE | `GET /stream/tickets?token=<jwt>` | Query param (EventSource não suporta headers) |
 | WebSocket | `WS /ws/tickets/{id}?token=<jwt>` | Query param (RFC 6455) |
 
-### Webhook
+### Webhook (Assinaturas de Saída)
 
-| Método | Rota | Cabeçalho |
+| Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/webhooks/tickets` | `X-Webhook-Signature: sha256=<hmac>` |
+| GET | `/webhook-subscriptions` | Lista todas as assinaturas cadastradas |
+| POST | `/webhook-subscriptions` | Cadastra novo endpoint receptor (retorna `secret` uma única vez) |
+| DELETE | `/webhook-subscriptions/{id}` | Remove uma assinatura |
+| PATCH | `/webhook-subscriptions/{id}/toggle` | Ativa ou desativa uma assinatura |
 
 ---
 
@@ -201,12 +226,14 @@ erDiagram
         datetime created_at
     }
 
-    WebhookEventLog {
+    WebhookSubscription {
         ObjectId id
-        str source
-        str event_type
-        dict payload
-        datetime received_at
+        str url
+        list events
+        str description
+        str secret
+        bool is_active
+        datetime created_at
     }
 
     User ||--o{ Ticket : "created_by"
@@ -253,11 +280,12 @@ sequenceDiagram
     end
 
     rect rgb(200, 170, 240)
-        note over Externo,WS: Webhook
-        Externo->>API: POST /webhooks/tickets<br/>X-Webhook-Signature: sha256=...
-        API->>API: verify_webhook_signature()
-        API->>DB: insert(WebhookEventLog)
-        API-->>Externo: {"received": true}
+        note over Externo,WS: Webhook de Saída
+        Cliente->>API: POST /tickets
+        API->>DB: insert(Ticket)
+        API->>API: dispatch("ticket.created", payload)
+        API->>Externo: POST <url_assinante><br/>X-Webhook-Signature: sha256=...
+        Externo-->>API: 200 OK
     end
 ```
 
