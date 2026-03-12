@@ -12,6 +12,8 @@ services:
       mongodb:
         condition: service_started
     restart: unless-stopped
+    networks:
+      - ticketflow
 
   mongodb:
     image: mongodb/mongodb-community-server:8.0.4-ubuntu2204
@@ -26,7 +28,7 @@ services:
     #   MONGODB_INITDB_ROOT_USERNAME: ${MONGODB__DATABASE_USERNAME}
     #   MONGODB_INITDB_ROOT_PASSWORD: ${MONGODB__DATABASE_PASSWORD}
     networks:
-      - kza-backend-hml
+      - ticketflow
 
   mailhog:
     image: mailhog/mailhog:latest
@@ -35,6 +37,8 @@ services:
       - "1025:1025"   # SMTP (para containers)
       - "8025:8025"   # UI Web (acesse em http://localhost:8025)
     restart: unless-stopped
+    networks:
+      - ticketflow
 
   email-notifier:
     build: ./services/email-notifier
@@ -55,7 +59,23 @@ services:
       - app
       - mailhog
     restart: unless-stopped
+    networks:
+      - ticketflow
 
 volumes:
   mongodb.data:
   mongodb.config:
+
+networks:
+  ticketflow:
+    name: "ticketflow"
+    driver: bridge
+    attachable: true
+    driver_opts:
+      com.docker.network.bridge.name: ticketflow
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    ipam:
+      driver: default
+      config:
+        - subnet: "12.199.0.0/16"
+          gateway: "12.199.0.1"
