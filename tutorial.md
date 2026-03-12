@@ -26,16 +26,14 @@
 
 **API** (_Application Programming Interface_) é um contrato que define como sistemas se comunicam.
 
-```
-Cliente (navegador, app, outro serviço)
-        │
-        │  HTTP Request  (GET /produtos)
-        ▼
-   [ API Server ]
-        │
-        │  HTTP Response (JSON)
-        ▼
-   {"id": 1, "nome": "Notebook", "preco": 3500.00}
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as API Server
+
+    C->>S: HTTP Request (GET /produtos)
+    S-->>C: HTTP Response (JSON)
+    Note over C: Exemplo de resposta: {"id": 1, "nome": "Notebook", "preco": 3500.00}
 ```
 
 ### REST — Representational State Transfer
@@ -601,15 +599,31 @@ Até agora toda comunicação seguiu o modelo **requisição → resposta**: o c
 
 ### O problema do modelo HTTP clássico
 
+**HTTP tradicional (polling):**
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor
+
+    C->>S: "há mensagens novas?"
+    S-->>C: "não"
+    C->>S: "há mensagens novas?"
+    S-->>C: "não"
+    C->>S: "há mensagens novas?"
+    S-->>C: "sim! aqui está"
 ```
-HTTP tradicional (polling)                 WebSocket
-──────────────────────────────────         ──────────────────────────────────
-Cliente: "há mensagens novas?"             Cliente ←──────────── Servidor
-Servidor: "não"                                     conexão aberta
-Cliente: "há mensagens novas?"                      (bidirecional)
-Servidor: "não"                            Servidor envia mensagem quando quiser
-Cliente: "há mensagens novas?"             Cliente envia mensagem quando quiser
-Servidor: "sim! aqui está"
+
+**WebSocket:**
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor
+
+    Note over C,S: Conexão aberta (bidirecional)
+    S-->>C: mensagem quando quiser
+    C-->>S: mensagem quando quiser
 ```
 
 O polling gera tráfego desnecessário e atraso. O WebSocket mantém uma **conexão persistente e bidirecional** — servidor e cliente podem se enviar mensagens a qualquer momento.
@@ -752,15 +766,31 @@ Nas partes anteriores vimos REST (requisição–resposta) e WebSocket (bidireci
 
 **Server-Sent Events (SSE)** é um mecanismo padronizado pela W3C/WHATWG que permite ao servidor enviar atualizações **unidirecionais** para o cliente por meio de uma conexão HTTP de longa duração. Diferentemente do polling tradicional — onde o cliente envia requisições repetidas perguntando "há novidades?" — com SSE o servidor mantém a conexão aberta e envia dados assim que eles estão disponíveis.
 
+**Polling tradicional:**
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor
+
+    C->>S: "novidades?"
+    S-->>C: "não"
+    C->>S: "novidades?"
+    S-->>C: "não"
+    C->>S: "novidades?"
+    S-->>C: "sim! aqui está"
 ```
-Polling tradicional                       SSE
-──────────────────────────────────        ──────────────────────────────────
-Cliente: "novidades?"  → Servidor         Cliente ←────────── Servidor
-Servidor: "não"                                   conexão HTTP aberta
-Cliente: "novidades?"  → Servidor         Servidor envia dados quando quiser
-Servidor: "não"                           Cliente apenas recebe
-Cliente: "novidades?"  → Servidor
-Servidor: "sim! aqui está"
+
+**SSE:**
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor
+
+    Note over C,S: Conexão HTTP aberta
+    S-->>C: dados quando quiser
+    Note over C: Cliente apenas recebe
 ```
 
 ### Características principais
@@ -840,22 +870,16 @@ No transporte **Streamable HTTP** do MCP, a comunicação funciona assim:
 2. O **servidor MCP** responde via **SSE**, enviando resultados e notificações em tempo real pelo stream `text/event-stream`.
 3. O servidor pode manter a conexão SSE aberta para enviar **notificações assíncronas** (ex.: progresso de tarefas longas, atualizações de recursos).
 
-```
-MCP Client (IA)                         MCP Server (Ferramentas)
-───────────────                         ────────────────────────
-    │                                        │
-    │  POST /mcp (JSON-RPC)                  │
-    │  {"method":"tools/call",               │
-    │   "params":{"name":"query_db"}}        │
-    │ ─────────────────────────────────────►  │
-    │                                        │
-    │  Content-Type: text/event-stream       │
-    │  ◄─────────────────────────────────────│
-    │  event: message                        │
-    │  data: {"result":{"rows":[...]}}       │
-    │                                        │
-    │  (conexão SSE mantida para             │
-    │   notificações futuras)                │
+```mermaid
+sequenceDiagram
+    participant C as MCP Client (IA)
+    participant S as MCP Server (Ferramentas)
+
+    C->>S: POST /mcp (JSON-RPC)
+    Note over C,S: {"method":"tools/call", "params":{"name":"query_db"}}
+    S-->>C: Content-Type: text/event-stream
+    Note over S,C: event: message / data: {"result":{"rows":[...]}}
+    Note over C,S: Conexão SSE mantida para notificações futuras
 ```
 
 #### Por que SSE é ideal para MCP
@@ -904,15 +928,32 @@ WebSocket e SSE resolvem comunicação em tempo real com o **navegador**. Mas e 
 
 **Webhook** é um padrão de integração baseado em **callbacks HTTP**: em vez de o sistema consumidor fazer polling para verificar se algo mudou, o sistema produtor envia uma requisição HTTP POST automaticamente para uma URL previamente cadastrada, assim que o evento ocorre. É frequentemente descrito como "HTTP push" ou "reverse API".
 
+**Polling (consumidor pergunta):**
+
+```mermaid
+sequenceDiagram
+    participant Consumidor
+    participant Produtor
+
+    Consumidor->>Produtor: "houve mudança?"
+    Produtor-->>Consumidor: "não"
+    Consumidor->>Produtor: "houve mudança?"
+    Produtor-->>Consumidor: "não"
+    Consumidor->>Produtor: "houve mudança?"
+    Produtor-->>Consumidor: "sim! (mas já passou tempo)"
 ```
-Polling (consumidor pergunta)              Webhook (produtor avisa)
-──────────────────────────────────         ──────────────────────────────────
-Consumidor: "houve mudança?"               Produtor detecta evento
-Produtor: "não"                            Produtor: POST https://consumidor/hook
-Consumidor: "houve mudança?"                         {"event": "ticket.created", ...}
-Produtor: "não"                            Consumidor processa o evento
-Consumidor: "houve mudança?"
-Produtor: "sim!" (mas já passou tempo)
+
+**Webhook (produtor avisa):**
+
+```mermaid
+sequenceDiagram
+    participant Consumidor
+    participant Produtor
+
+    Note over Produtor: detecta evento
+    Produtor->>Consumidor: POST https://consumidor/hook
+    Note over Produtor,Consumidor: {"event": "ticket.created", ...}
+    Note over Consumidor: processa o evento
 ```
 
 ### Como funciona
