@@ -1271,7 +1271,7 @@
 ================================================================ */
 
 // ── Estado global ─────────────────────────────────────────────
-let token      = null;   // JWT armazenado em memória
+let token      = null;   // JWT — em memória durante a sessão; persistido no localStorage entre recarregamentos
 let loggedUser = null;   // { id, username, role }
 let notifEnabled = true; // notificações + SSE habilitados
 let sseSource  = null;   // EventSource ativa
@@ -1318,6 +1318,14 @@ function authHeaders() {
 async function apiFetch(path, opts = {}) {
   const res  = await fetch(path, { headers: authHeaders(), ...opts });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    // Token expirado ou inválido — limpa sessão e volta para login
+    localStorage.removeItem('token');
+    token      = null;
+    loggedUser = null;
+    navigate('login');
+    throw new Error('Sessão expirada. Faça login novamente.');
+  }
   if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
   return body;
 }
@@ -1509,6 +1517,7 @@ async function login() {
       username: $('login-user').value, password: $('login-pass').value
     })});
     token = d.access_token;
+    localStorage.setItem('token', token);  // persiste entre recarregamentos
     await getMe(true);
     loadAgents();          // popula agentsMap globalmente para notificações SSE
     if (notifEnabled) startSSE();
@@ -1554,6 +1563,7 @@ function onToggleNotif(enabled) {
 }
 
 function logout() {
+  localStorage.removeItem('token');  // limpa token persistido
   token      = null;
   loggedUser = null;
   agentsMap  = {};
@@ -2111,7 +2121,26 @@ function escHtml(str) {
 //  Init
 // ══════════════════════════════════════════════════════════════
 
-navigate('login');
+async function initAuth() {
+  const saved = localStorage.getItem('token');
+  if (!saved) { navigate('login'); return; }
+
+  // Restaura token em memória e valida com o servidor
+  token = saved;
+  try {
+    await getMe(true);
+    loadAgents();
+    if (notifEnabled) startSSE();
+    navigate('list');
+  } catch (e) {
+    // Token inválido ou expirado — limpa e pede novo login
+    localStorage.removeItem('token');
+    token = null;
+    navigate('login');
+  }
+}
+
+initAuth();
 </script>
 </body>
 </html>

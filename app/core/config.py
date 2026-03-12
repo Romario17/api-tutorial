@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # JWT
     secret_key: str = "CHANGE_THIS_SECRET_IN_PRODUCTION"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 1440  # 24h — ideal para tutorial
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
