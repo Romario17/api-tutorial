@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from app.core.config import settings
 from app.core.events import MessageEvents
 from app.core.exceptions import NotFoundError
 from app.core.websocket_manager import WebSocketManager
@@ -48,7 +50,8 @@ class MessageService:
     def _fire_webhook(self, event_type: str, data: dict[str, Any]) -> None:
         """Dispara webhook fire-and-forget com referência segura à task."""
         if self._dispatch_webhook:
-            task = asyncio.create_task(self._dispatch_webhook(event_type, data))
+            task = asyncio.create_task(
+                self._dispatch_webhook(event_type, data))
             _background_tasks.add(task)
             task.add_done_callback(_background_tasks.discard)
 
@@ -89,11 +92,17 @@ class MessageService:
             },
         )
 
+        ticket_code = f"TKT-{int(str(ticket.id)[-6:], 16) % 10_000:04d}"
         self._fire_webhook(
             MessageEvents.CREATED,
             {
-                **response.model_dump(mode="json"),
-                "author_username": current_user.username,
+                "code": ticket_code,
+                "title": ticket.title,
+                "message": msg.message,
+                "author": current_user.username,
+                "created_at": msg.created_at
+                .astimezone(ZoneInfo(settings.timezone))
+                .isoformat(),
             },
         )
         return response
