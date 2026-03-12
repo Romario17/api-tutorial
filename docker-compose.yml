@@ -14,13 +14,19 @@ services:
     restart: unless-stopped
 
   mongodb:
-    image: mongo:8
+    image: mongodb/mongodb-community-server:8.0.4-ubuntu2204
     container_name: ticketflow-mongodb
+    restart: unless-stopped
+    volumes:
+      - mongodb.data:/data/db
+      - mongodb.config:/data/configdb
     ports:
       - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    restart: unless-stopped
+    # environment:
+    #   MONGODB_INITDB_ROOT_USERNAME: ${MONGODB__DATABASE_USERNAME}
+    #   MONGODB_INITDB_ROOT_PASSWORD: ${MONGODB__DATABASE_PASSWORD}
+    networks:
+      - kza-backend-hml
 
   mailhog:
     image: mailhog/mailhog:latest
@@ -51,4 +57,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  mongo_data:
+  mongodb.data:
+  mongodb.config:
