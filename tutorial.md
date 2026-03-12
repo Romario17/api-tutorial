@@ -17,7 +17,7 @@
 | 5   | Injeção de dependência           |
 | 6   | CRUD completo com banco de dados |
 | 7   | WebSockets                       |
-| 8   | Server-Sent Events (SSE)         |
+| 8   | Server-Sent Events (SSE) e MCP   |
 | 9   | Webhooks                         |
 
 ---
@@ -815,6 +815,7 @@ Servidor: "sim! aqui está"
 
 - **Painéis de monitoramento** que precisam refletir mudanças em tempo real.
 - **Feeds de notificações** onde o cliente apenas *recebe* informação.
+- **Servidores MCP** que precisam enviar respostas e notificações a assistentes de IA via stream HTTP.
 - Cenários em que **simplicidade** é prioridade, pois SSE funciona sobre HTTP comum (sem upgrade de protocolo) e atravessa proxies e firewalls com facilidade.
 
 ### Quando *não* usar SSE
@@ -972,6 +973,59 @@ async def create_ticket(self, ...) -> TicketResponse:
 
 A separação entre `SSEManager` (fila) e o endpoint (gerador) garante que múltiplos clientes possam se conectar simultaneamente, cada um com sua própria fila independente, sem bloquear uns aos outros.
 
+### SSE no contexto de MCP (Model Context Protocol)
+
+O **Model Context Protocol (MCP)** é um protocolo aberto que padroniza a comunicação entre assistentes de IA (como o GitHub Copilot e o Claude) e **servidores de ferramentas externas** — bancos de dados, APIs, sistemas de arquivos, etc. O MCP utiliza SSE como um de seus mecanismos de transporte, aproveitando exatamente as mesmas características que vimos nesta seção.
+
+#### Como o MCP usa SSE
+
+No transporte **Streamable HTTP** do MCP, a comunicação funciona assim:
+
+1. O **cliente MCP** (assistente de IA) envia requisições via `HTTP POST` para o servidor MCP.
+2. O **servidor MCP** responde via **SSE**, enviando resultados e notificações em tempo real pelo stream `text/event-stream`.
+3. O servidor pode manter a conexão SSE aberta para enviar **notificações assíncronas** (ex.: progresso de tarefas longas, atualizações de recursos).
+
+```
+MCP Client (IA)                         MCP Server (Ferramentas)
+───────────────                         ────────────────────────
+    │                                        │
+    │  POST /mcp (JSON-RPC)                  │
+    │  {"method":"tools/call",               │
+    │   "params":{"name":"query_db"}}        │
+    │ ─────────────────────────────────────►  │
+    │                                        │
+    │  Content-Type: text/event-stream       │
+    │  ◄─────────────────────────────────────│
+    │  event: message                        │
+    │  data: {"result":{"rows":[...]}}       │
+    │                                        │
+    │  (conexão SSE mantida para             │
+    │   notificações futuras)                │
+```
+
+#### Por que SSE é ideal para MCP
+
+| Vantagem do SSE | Benefício para MCP |
+|-----------------|---------------------|
+| **HTTP padrão** | Funciona com infraestrutura existente (proxies, load balancers, firewalls) |
+| **Unidirecional** | Modelo natural para respostas do servidor — o cliente envia via POST separado |
+| **Reconexão automática** | Sessões MCP sobrevivem a quedas temporárias de rede |
+| **Streaming nativo** | Permite respostas incrementais (ex.: resultados parciais de queries longas) |
+| **Simplicidade** | Mais fácil de implementar e depurar do que WebSocket para cenários requisição-resposta |
+
+#### Relação com o TicketFlow
+
+O padrão SSE que implementamos no TicketFlow — produtor emite eventos, consumidor recebe via stream HTTP — é **o mesmo padrão usado pelo MCP**. A principal diferença é o contexto:
+
+| Aspecto | TicketFlow (SSE) | MCP (SSE) |
+|---------|------------------|-----------|
+| **Produtor** | `SSEManager` (eventos de tickets) | Servidor MCP (resultados de ferramentas) |
+| **Consumidor** | Navegador (`EventSource`) | Cliente MCP (assistente de IA) |
+| **Formato dos dados** | `event: ticket.created\ndata: {...}` | `event: message\ndata: {"jsonrpc":"2.0",...}` |
+| **Caso de uso** | Painel de monitoramento em tempo real | Integração de IA com ferramentas externas |
+
+> 💡 **Conexão prática**: ao aprender SSE neste tutorial, você já está aprendendo o transporte que viabiliza a comunicação entre modelos de IA e o mundo externo via MCP. Um servidor MCP em Python com FastAPI utiliza `StreamingResponse` com `text/event-stream` — exatamente como o endpoint `/stream/tickets` do TicketFlow.
+
 ### Diferença entre SSE e WebSocket
 
 | Aspecto | SSE | WebSocket |
@@ -981,7 +1035,7 @@ A separação entre `SSEManager` (fila) e o endpoint (gerador) garante que múlt
 | Reconexão | Automática (`EventSource`) | Manual |
 | Overhead | Baixo (HTTP) | Muito baixo (frames binários) |
 | Proxy/firewall | Transparente | Pode exigir configuração |
-| Caso de uso típico | Dashboards, notificações | Chat, jogos, colaboração |
+| Caso de uso típico | Dashboards, notificações, MCP | Chat, jogos, colaboração |
 
 ### 🎯 Quiz 7
 
@@ -1156,6 +1210,8 @@ O `WebhookDispatcherService` (`app/services/webhook_dispatcher.py`) é responsá
 - [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
 - [MDN — EventSource (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/EventSource)
 - [REST API Design Best Practices](https://restfulapi.net/)
+- [Model Context Protocol — Especificação](https://modelcontextprotocol.io)
+- [MCP — Transporte SSE](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)
 ---
 
 **Obrigado!** 🎉  
